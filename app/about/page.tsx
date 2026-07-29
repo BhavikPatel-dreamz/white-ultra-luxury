@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { SiteShell } from "@/components/layout/site-shell";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
@@ -13,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function AboutRoute() {
   return (
-    <SiteShell>
+    <>
       <section className="relative min-h-[44rem] overflow-hidden border-b border-border bg-black text-white">
         <Image alt="A considered evening hookah ritual" className="object-cover opacity-65" fill preload sizes="100vw" src="/ember-halo/collection-hookah-ritual.png" />
         <div className="absolute inset-0 bg-gradient-to-r from-black via-black/55 to-transparent" />
@@ -120,6 +119,6 @@ export default function AboutRoute() {
           </div>
         </Container>
       </section>
-    </SiteShell>
+    </>
   );
 }

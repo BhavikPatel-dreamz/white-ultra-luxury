@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { SiteShell } from "@/components/layout/site-shell";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
@@ -19,9 +18,9 @@ export default async function AccountRoute({ searchParams }: AccountRouteProps) 
   const { preview } = await searchParams;
 
   return (
-    <SiteShell>
+    <>
       {preview === "1" ? <AccountPreview /> : <GuestAccount />}
-    </SiteShell>
+    </>
   );
 }
 

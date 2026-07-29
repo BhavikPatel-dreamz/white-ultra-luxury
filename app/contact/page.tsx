@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import type { InputHTMLAttributes } from "react";
-import { SiteShell } from "@/components/layout/site-shell";
 import { InfoPage } from "@/components/sections/info-page";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -35,7 +34,7 @@ export default async function ContactRoute({ searchParams }: ContactRouteProps) 
   const selectedTopic = topic === "review" ? "review" : "";
 
   return (
-    <SiteShell>
+    <>
       <InfoPage
         description="Product guidance, order support, and setup advice from people who know the details. We typically reply within one business day."
         eyebrow="Talk to the studio"
@@ -116,7 +115,7 @@ export default async function ContactRoute({ searchParams }: ContactRouteProps) 
           </aside>
         </div>
       </InfoPage>
-    </SiteShell>
+    </>
   );
 }
 

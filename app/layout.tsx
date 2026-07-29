@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { SiteShell } from "@/components/layout/site-shell";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -89,7 +90,9 @@ export default function RootLayout({
       className={`${bodyFont.variable} ${displayFont.variable} ${accentFont.variable} h-full antialiased`}
       lang="en"
     >
-      <body className="min-h-full bg-background font-sans text-foreground">{children}</body>
+      <body className="min-h-full bg-background font-sans text-foreground">
+        <SiteShell>{children}</SiteShell>
+      </body>
     </html>
   );
 }

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteShell } from "@/components/layout/site-shell";
 import { CollectionsIndexPage } from "@/components/sections/collections-index-page";
 import { listCollections } from "@/lib/medusa";
 
@@ -14,8 +13,8 @@ export default async function CollectionsRoute() {
   const collections = await listCollections();
 
   return (
-    <SiteShell>
+    <>
       <CollectionsIndexPage collections={collections} />
-    </SiteShell>
+    </>
   );
 }

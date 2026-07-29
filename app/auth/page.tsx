@@ -3,7 +3,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { InputHTMLAttributes } from "react";
-import { SiteShell } from "@/components/layout/site-shell";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
@@ -37,7 +36,7 @@ export default async function AuthRoute({ searchParams }: AuthRouteProps) {
   const isRegister = params.mode === "register";
 
   return (
-    <SiteShell>
+    <>
       <Container className="py-8 md:py-14">
         <div className="grid min-h-[42rem] overflow-hidden border border-border bg-surface-elevated lg:grid-cols-[0.9fr_1.1fr]">
           <div className="relative hidden min-h-full overflow-hidden lg:block">
@@ -105,7 +104,7 @@ export default async function AuthRoute({ searchParams }: AuthRouteProps) {
           </div>
         </div>
       </Container>
-    </SiteShell>
+    </>
   );
 }
 

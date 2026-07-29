@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteShell } from "@/components/layout/site-shell";
 import { CategoriesIndexPage } from "@/components/sections/categories-index-page";
 import { listCategories } from "@/lib/medusa";
 
@@ -14,8 +13,8 @@ export default async function CategoriesRoute() {
   const categories = await listCategories();
 
   return (
-    <SiteShell>
+    <>
       <CategoriesIndexPage categories={categories} />
-    </SiteShell>
+    </>
   );
 }

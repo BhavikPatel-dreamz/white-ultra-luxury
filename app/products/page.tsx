@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteShell } from "@/components/layout/site-shell";
 import { ProductListingPage } from "@/components/sections/product-listing-page";
 import { listAllProducts } from "@/lib/medusa";
 import {
@@ -25,7 +24,7 @@ export default async function ProductsRoute({ searchParams }: ProductsRouteProps
   const { count, products } = await listAllProducts();
 
   return (
-    <SiteShell>
+    <>
       <ProductListingPage
         basePath="/products"
         count={count}
@@ -37,6 +36,6 @@ export default async function ProductsRoute({ searchParams }: ProductsRouteProps
         products={products}
         title="Products"
       />
-    </SiteShell>
+    </>
   );
 }

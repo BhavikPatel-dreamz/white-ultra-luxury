@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteShell } from "@/components/layout/site-shell";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
@@ -19,7 +18,7 @@ export default async function OrderSuccessRoute({ searchParams }: OrderSuccessRo
   const orderLabel = order?.trim().slice(0, 32) || "E&H-DEMO";
 
   return (
-    <SiteShell>
+    <>
       <Container className="py-12 md:py-20">
         <div className="mx-auto max-w-5xl overflow-hidden border border-border bg-surface-elevated">
           <div className="relative overflow-hidden bg-primary px-6 py-14 text-primary-foreground md:px-12 md:py-20">
@@ -60,6 +59,6 @@ export default async function OrderSuccessRoute({ searchParams }: OrderSuccessRo
           </div>
         </div>
       </Container>
-    </SiteShell>
+    </>
   );
 }

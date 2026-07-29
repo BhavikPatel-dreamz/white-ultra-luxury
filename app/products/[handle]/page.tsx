@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { SiteShell } from "@/components/layout/site-shell";
 import { ProductDetailPage } from "@/components/sections/product-detail-page";
 import { getProductByHandle, getRelatedProducts } from "@/lib/medusa";
 
@@ -41,11 +40,11 @@ export default async function ProductRoute({ params }: ProductRouteProps) {
   }
 
   return (
-    <SiteShell>
+    <>
       <ProductDetailPage
         product={product}
         relatedProducts={await getRelatedProducts(product.handle)}
       />
-    </SiteShell>
+    </>
   );
 }

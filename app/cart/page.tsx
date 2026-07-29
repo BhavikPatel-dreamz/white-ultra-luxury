@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { CartPage } from "@/components/cart/cart-page";
-import { SiteShell } from "@/components/layout/site-shell";
 
 export const metadata: Metadata = {
   title: "Cart — Ember & Halo",
@@ -9,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function CartRoute() {
   return (
-    <SiteShell>
+    <>
       <CartPage />
-    </SiteShell>
+    </>
   );
 }

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { SiteShell } from "@/components/layout/site-shell";
 import { ProductListingPage } from "@/components/sections/product-listing-page";
 import { getCategoryByHandle, listAllProducts } from "@/lib/medusa";
 import {
@@ -52,7 +51,7 @@ export default async function CategoryRoute({
   });
 
   return (
-    <SiteShell>
+    <>
       <ProductListingPage
         basePath={`/categories/${category.handle}`}
         count={count}
@@ -64,6 +63,6 @@ export default async function CategoryRoute({
         products={products}
         title={category.name}
       />
-    </SiteShell>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteShell } from "@/components/layout/site-shell";
 import { WishlistPage } from "@/components/sections/wishlist-page";
 
 export const metadata: Metadata = {
@@ -9,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function WishlistRoute() {
   return (
-    <SiteShell>
+    <>
       <WishlistPage />
-    </SiteShell>
+    </>
   );
 }

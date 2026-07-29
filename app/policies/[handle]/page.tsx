@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { SiteShell } from "@/components/layout/site-shell";
 import { InfoPage } from "@/components/sections/info-page";
 
 type PolicySection = {
@@ -120,7 +119,7 @@ export default async function PolicyRoute({ params }: PolicyRouteProps) {
   }
 
   return (
-    <SiteShell>
+    <>
       <InfoPage description={policy.description} eyebrow="Policy archive / 2026" title={policy.title}>
         <div className="mb-10 flex flex-col gap-3 border-b border-border pb-7 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span className="font-mono uppercase tracking-[0.16em] text-primary">Effective July 29, 2026</span>
@@ -148,6 +147,6 @@ export default async function PolicyRoute({ params }: PolicyRouteProps) {
           This policy is presented for the Ember &amp; Halo demonstration storefront. The operating merchant should review and adapt it with qualified counsel for its products, locations, providers, and applicable law before launch.
         </div>
       </InfoPage>
-    </SiteShell>
+    </>
   );
 }

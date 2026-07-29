@@ -1,4 +1,3 @@
-import { SiteShell } from "@/components/layout/site-shell";
 import { EmberHomePage } from "@/components/sections/ember-home-page";
 import { listAllProducts, listCatalogTaxonomy } from "@/lib/medusa";
 
@@ -11,12 +10,12 @@ export default async function Home() {
   ]);
 
   return (
-    <SiteShell>
+    <>
       <EmberHomePage
         categories={categories}
         collections={collections}
         products={products}
       />
-    </SiteShell>
+    </>
   );
 }

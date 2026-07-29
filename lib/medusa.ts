@@ -14,6 +14,7 @@ import { sdk } from "@/api/api";
 import {
   deriveCatalogCategoryNames,
   getCatalogCategoryByHandle,
+  getCatalogCollectionByHandle,
   mergeCatalogCategories,
   mergeCatalogCollections,
   normalizeCatalogText,
@@ -867,7 +868,7 @@ export function mapCollection(collection: HttpTypes.StoreCollection) {
     description:
       metadataString(collection.metadata, ["description", "short_description"]) ??
       `Explore ${collection.title.trim()}.`,
-    handle: collection.handle,
+    handle: collection.handle.trim(),
     id: collection.id,
     image:
       metadataString(collection.metadata, ["image", "thumbnail"]) ??
@@ -881,7 +882,7 @@ export function mapCollection(collection: HttpTypes.StoreCollection) {
 export function mapCategory(category: HttpTypes.StoreProductCategory) {
   return {
     description: category.description || `Explore ${category.name.trim()}.`,
-    handle: category.handle,
+    handle: category.handle.trim(),
     id: category.id,
     image:
       metadataString(category.metadata, ["image", "thumbnail"]) ??
@@ -1040,8 +1041,12 @@ const getLiveCatalogTaxonomy = cache(async (): Promise<CatalogTaxonomy> => {
     return { categories, collections };
   } catch {
     // Fail closed: never expose unscoped Admin taxonomy if product visibility
-    // cannot be resolved for the configured publishable key.
-    return { categories: [], collections: [] };
+    // cannot be resolved for the configured publishable key. The presentation
+    // taxonomy is local, public data and keeps known storefront routes usable.
+    return {
+      categories: mergeCatalogCategories([]),
+      collections: mergeCatalogCollections([]),
+    };
   }
 });
 
@@ -1275,9 +1280,47 @@ export async function listCollections(limit = 100) {
   return collections.slice(0, limit);
 }
 
+function normalizeCatalogHandle(handle: string) {
+  try {
+    return decodeURIComponent(handle).trim().toLowerCase();
+  } catch {
+    return handle.trim().toLowerCase();
+  }
+}
+
+const resolveStoreCollectionByHandle = cache(async (handle: string) => {
+  try {
+    const response = await sdk.store.collection.list({
+      fields: "id,title,handle,metadata",
+      handle,
+      limit: 1,
+    });
+    const collection = response.collections.find(
+      (candidate) => normalizeCatalogHandle(candidate.handle) === handle,
+    );
+
+    return collection ? mapCollection(collection) : null;
+  } catch {
+    return null;
+  }
+});
+
 export async function getCollectionByHandle(handle: string) {
+  const normalizedHandle = normalizeCatalogHandle(handle);
   const { collections } = await listCatalogTaxonomy();
-  return collections.find((collection) => collection.handle === handle) ?? null;
+  const collection = collections.find(
+    (candidate) => normalizeCatalogHandle(candidate.handle) === normalizedHandle,
+  );
+
+  if (collection) {
+    return collection;
+  }
+
+  return (
+    (await resolveStoreCollectionByHandle(normalizedHandle)) ??
+    getCatalogCollectionByHandle(normalizedHandle) ??
+    null
+  );
 }
 
 export async function listCategories(limit = 100) {
@@ -1285,9 +1328,39 @@ export async function listCategories(limit = 100) {
   return categories.slice(0, limit);
 }
 
+const resolveStoreCategoryByHandle = cache(async (handle: string) => {
+  try {
+    const response = await sdk.store.category.list({
+      fields: "id,name,description,handle,parent_category_id,metadata",
+      handle,
+      limit: 1,
+    });
+    const category = response.product_categories.find(
+      (candidate) => normalizeCatalogHandle(candidate.handle) === handle,
+    );
+
+    return category ? mapCategory(category) : null;
+  } catch {
+    return null;
+  }
+});
+
 export async function getCategoryByHandle(handle: string) {
+  const normalizedHandle = normalizeCatalogHandle(handle);
   const { categories } = await listCatalogTaxonomy();
-  return categories.find((category) => category.handle === handle) ?? null;
+  const category = categories.find(
+    (candidate) => normalizeCatalogHandle(candidate.handle) === normalizedHandle,
+  );
+
+  if (category) {
+    return category;
+  }
+
+  return (
+    (await resolveStoreCategoryByHandle(normalizedHandle)) ??
+    getCatalogCategoryByHandle(normalizedHandle) ??
+    null
+  );
 }
 
 export async function retrieveCart(cartId: string) {

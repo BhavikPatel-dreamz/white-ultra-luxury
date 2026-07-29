@@ -1,10 +1,9 @@
-import { SiteShell } from "@/components/layout/site-shell";
 import { Container } from "@/components/ui/container";
 import { Eyebrow } from "@/components/ui/section-title";
 
 export default function ProductLoading() {
   return (
-    <SiteShell>
+    <>
       <Container className="grid gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-16">
         <div>
           <div className="aspect-square rounded-[var(--radius)] border border-border bg-muted" />
@@ -26,6 +25,6 @@ export default function ProductLoading() {
           </div>
         </div>
       </Container>
-    </SiteShell>
+    </>
   );
 }

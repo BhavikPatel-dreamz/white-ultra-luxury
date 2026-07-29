@@ -1,4 +1,3 @@
-import { SiteShell } from "@/components/layout/site-shell";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
@@ -24,7 +23,7 @@ const routes = [
 
 export default function NotFound() {
   return (
-    <SiteShell>
+    <>
       <section className="relative isolate overflow-hidden border-b border-border bg-background">
         <div aria-hidden="true" className="hero-grid absolute inset-0 opacity-70" />
         <div
@@ -116,6 +115,6 @@ export default function NotFound() {
           </div>
         </Container>
       </section>
-    </SiteShell>
+    </>
   );
 }

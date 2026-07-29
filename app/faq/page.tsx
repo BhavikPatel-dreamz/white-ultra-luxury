@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SiteShell } from "@/components/layout/site-shell";
 import { InfoPage } from "@/components/sections/info-page";
 import { ButtonLink } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -41,7 +40,7 @@ const faqGroups = [
 
 export default function FaqRoute() {
   return (
-    <SiteShell>
+    <>
       <InfoPage
         description="Straight answers before and after you order—from device compatibility to discreet delivery and responsible product care."
         eyebrow="Help desk / Field notes"
@@ -81,6 +80,6 @@ export default function FaqRoute() {
           </section>
         </div>
       </InfoPage>
-    </SiteShell>
+    </>
   );
 }
