@@ -6,7 +6,7 @@ import { listCategories } from "@/lib/medusa";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Categories \u2014 DaVinci",
+  title: "Categories — Ember & Halo",
   description: "Browse every category from the Medusa catalog.",
 };
 

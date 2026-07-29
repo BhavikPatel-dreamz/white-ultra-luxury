@@ -25,12 +25,12 @@ export async function generateMetadata({
 
   if (!collection) {
     return {
-      title: "Collection not found \u2014 DaVinci",
+      title: "Collection not found — Ember & Halo",
     };
   }
 
   return {
-    title: `${collection.name} \u2014 DaVinci`,
+    title: `${collection.name} — Ember & Halo`,
     description: collection.description,
   };
 }

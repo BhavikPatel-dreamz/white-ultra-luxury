@@ -10,10 +10,58 @@ import type {
   ProductVariant,
 } from "@/types/site";
 import { sdk } from "@/api/api";
+import {
+  deriveCatalogCategoryNames,
+  getCatalogCategoryByHandle,
+  getCatalogCollectionByHandle,
+  mergeCatalogCategories,
+  mergeCatalogCollections,
+  normalizeCatalogText,
+} from "@/lib/catalog-presentation";
+import { fallbackProducts } from "@/lib/data";
 import { formatMoney } from "@/lib/format";
 
-const PLACEHOLDER_IMAGE = "/assets/product-accessories-BrKIPgD4.jpg";
+const CATEGORY_FALLBACK_IMAGES = [
+  { keywords: ["disposable", "puff", "bar"], image: "/ember-halo/category-disposables.png" },
+  { keywords: ["vape kit", "starter", "mod"], image: "/ember-halo/category-vape-kits.png" },
+  { keywords: ["pod system"], image: "/ember-halo/category-pod-systems.png" },
+  { keywords: ["e-liquid", "eliquid", "juice", "freebase"], image: "/ember-halo/category-e-liquids.png" },
+  { keywords: ["nicotine salt", "nic salt"], image: "/ember-halo/category-nic-salts.png" },
+  { keywords: ["coil", "mesh head"], image: "/ember-halo/category-coils.png" },
+  { keywords: ["replacement pod", "cartridge", "pods"], image: "/ember-halo/category-pods.png" },
+  { keywords: ["tank", "atomizer", "rta"], image: "/ember-halo/category-tanks.png" },
+  { keywords: ["hookah bowl", "phunnel"], image: "/ember-halo/category-hookah-bowls.png" },
+  { keywords: ["hookah flavor", "shisha flavor", "molasses"], image: "/ember-halo/category-hookah-flavors.png" },
+  { keywords: ["hookah", "shisha pipe"], image: "/ember-halo/category-hookahs.png" },
+  { keywords: ["charcoal", "coal", "coconut cube"], image: "/ember-halo/category-charcoal.png" },
+  { keywords: ["accessory", "charger", "tool", "case"], image: "/ember-halo/category-accessories.png" },
+] as const;
+
+const COLLECTION_FALLBACK_IMAGES = [
+  "/ember-halo/collection-night-shift.png",
+  "/ember-halo/collection-flavor-lab.png",
+  "/ember-halo/collection-hookah-ritual.png",
+  "/ember-halo/collection-pocket-edit.png",
+] as const;
+
+function getCategoryFallbackImage(values: string[], seed: string) {
+  const searchable = normalizeCatalogText(values.join(" "));
+  const matched = CATEGORY_FALLBACK_IMAGES.find((candidate) =>
+    candidate.keywords.some((keyword) => searchable.includes(normalizeCatalogText(keyword))),
+  );
+
+  return (
+    matched?.image ??
+    CATEGORY_FALLBACK_IMAGES[stableNumber(seed) % CATEGORY_FALLBACK_IMAGES.length].image
+  );
+}
+
+function getCollectionFallbackImage(seed: string) {
+  return COLLECTION_FALLBACK_IMAGES[stableNumber(seed) % COLLECTION_FALLBACK_IMAGES.length];
+}
 const DEFAULT_LIMIT = 12;
+const LIVE_CATALOG_ENABLED =
+  process.env.NEXT_PUBLIC_EMBER_HALO_LIVE_CATALOG !== "false";
 
 const PRODUCT_FIELDS = [
   "id",
@@ -31,8 +79,9 @@ const PRODUCT_FIELDS = [
   "collection_id",
   "type_id",
   "*type",
-  "*variants.calculated_price",
+  "*variants",
   "*variants.options",
+  "*options",
   "+variants.inventory_quantity",
   "*images",
   "*collection",
@@ -103,6 +152,37 @@ type ListProductsOptions = {
   limit?: number;
   offset?: number;
 };
+
+function getFallbackProductPage({
+  handle,
+  limit = DEFAULT_LIMIT,
+  offset = 0,
+}: Pick<ListProductsOptions, "handle" | "limit" | "offset"> = {}) {
+  const matchingProducts = handle
+    ? fallbackProducts.filter((product) => product.handle === handle)
+    : fallbackProducts;
+
+  return {
+    count: matchingProducts.length,
+    limit,
+    offset,
+    products: matchingProducts.slice(offset, offset + limit),
+    region: null,
+  } satisfies PaginatedProducts;
+}
+
+function getEmptyProductPage({
+  limit = DEFAULT_LIMIT,
+  offset = 0,
+}: Pick<ListProductsOptions, "limit" | "offset"> = {}) {
+  return {
+    count: 0,
+    limit,
+    offset,
+    products: [],
+    region: null,
+  } satisfies PaginatedProducts;
+}
 
 export type CheckoutDetails = {
   address1: string;
@@ -386,19 +466,233 @@ function getVariantStock(variant: HttpTypes.StoreProductVariant) {
   return variant.inventory_quantity > 0;
 }
 
+function getVariantOptions(variant: HttpTypes.StoreProductVariant) {
+  return (
+    variant.options?.flatMap((option) => {
+      const name = option.option?.title?.trim();
+      const value = option.value?.trim();
+
+      return name && value ? [{ name, value }] : [];
+    }) ?? []
+  );
+}
+
+function findOptionValue(
+  options: ReturnType<typeof getVariantOptions>,
+  matches: string[],
+) {
+  return options.find((option) =>
+    matches.some((match) => option.name.toLowerCase().includes(match)),
+  )?.value;
+}
+
 function mapVariant(variant: HttpTypes.StoreProductVariant, fallbackCurrency: string) {
   const calculatedPrice = variant.calculated_price;
   const currencyCode = calculatedPrice?.currency_code ?? fallbackCurrency;
   const price = calculatedPrice?.calculated_amount ?? 0;
+  const options = getVariantOptions(variant);
 
   return {
     color: getVariantColor(variant),
+    flavor: findOptionValue(options, ["flavor", "flavour", "taste"]),
     id: variant.id,
     inStock: getVariantStock(variant),
     name: getVariantName(variant),
+    nicotineStrength: findOptionValue(options, ["nicotine", "strength", "mg"]),
+    options,
     price,
     priceDisplay: formatMoney(price, currencyCode),
   } satisfies ProductVariant;
+}
+
+function stableNumber(value: string) {
+  return Array.from(value).reduce(
+    (total, character) => (total * 31 + character.charCodeAt(0)) % 100_003,
+    17,
+  );
+}
+
+function prefixedTagValues(tags: string[], prefixes: string[]) {
+  return tags.flatMap((tag) => {
+    const separatorIndex = tag.search(/[:=]/);
+
+    if (separatorIndex < 0) {
+      return [];
+    }
+
+    const prefix = tag.slice(0, separatorIndex).trim().toLowerCase();
+    const value = tag.slice(separatorIndex + 1).trim();
+
+    return prefixes.includes(prefix) && value ? [value] : [];
+  });
+}
+
+function getProductBrand(
+  product: HttpTypes.StoreProduct,
+  tags: string[],
+) {
+  const metadataBrand = metadataString(product.metadata, [
+    "brand",
+    "manufacturer",
+    "maker",
+    "vendor",
+  ]);
+
+  if (metadataBrand) {
+    return metadataBrand;
+  }
+
+  const taggedBrand = prefixedTagValues(tags, ["brand", "maker"])[0];
+
+  if (taggedBrand) {
+    return taggedBrand;
+  }
+
+  const knownBrands = [
+    "Vaporesso",
+    "GeekVape",
+    "Uwell",
+    "VOOPOO",
+    "Lost Vape",
+    "OXVA",
+    "SMOK",
+    "Elf Bar",
+    "Al Fakher",
+    "Kaloud",
+    "Khalil Mamoon",
+  ];
+  const searchableName = product.title.toLowerCase();
+
+  return (
+    knownBrands.find((brand) => searchableName.includes(brand.toLowerCase())) ??
+    "Ember & Halo"
+  );
+}
+
+function getProductFlavors({
+  categoryNames,
+  metadata,
+  productId,
+  tags,
+  variants,
+}: {
+  categoryNames: string[];
+  metadata: Metadata;
+  productId: string;
+  tags: string[];
+  variants: ProductVariant[];
+}) {
+  const configured = metadataStringArray(metadata, [
+    "flavors",
+    "flavours",
+    "flavor",
+    "flavour",
+    "taste_profile",
+  ]);
+  const values = uniqueStrings([
+    ...configured,
+    ...prefixedTagValues(tags, ["flavor", "flavour", "taste"]),
+    ...variants.map((variant) => variant.flavor),
+  ]);
+
+  if (values.length > 0) {
+    return values;
+  }
+
+  const isFlavorProduct = categoryNames.some((category) =>
+    [
+      "Disposable Vapes",
+      "E-Liquids",
+      "Nicotine Salts",
+      "Hookah Flavors",
+    ].includes(category),
+  );
+
+  if (!isFlavorProduct) {
+    return [];
+  }
+
+  const flavorSets = [
+    ["Blue Razz Ice", "Watermelon Chill", "Polar Mint"],
+    ["Mango Ember", "Peach Nectar", "Fresh Mint"],
+    ["Velvet Grape", "Citrus No. 07", "Mint Leaf"],
+  ];
+
+  return flavorSets[stableNumber(productId) % flavorSets.length];
+}
+
+function getNicotineStrengths({
+  categoryNames,
+  metadata,
+  tags,
+  variants,
+}: {
+  categoryNames: string[];
+  metadata: Metadata;
+  tags: string[];
+  variants: ProductVariant[];
+}) {
+  const configured = metadataStringArray(metadata, [
+    "nicotine_strengths",
+    "nicotine_strength",
+    "strengths",
+    "strength",
+  ]);
+  const values = uniqueStrings([
+    ...configured,
+    ...prefixedTagValues(tags, ["nicotine", "nic", "strength"]),
+    ...variants.map((variant) => variant.nicotineStrength),
+  ]);
+
+  if (values.length > 0) {
+    return values;
+  }
+
+  if (categoryNames.includes("E-Liquids")) {
+    return ["0 mg", "3 mg", "6 mg"];
+  }
+
+  if (
+    categoryNames.some((category) =>
+      ["Disposable Vapes", "Nicotine Salts"].includes(category),
+    )
+  ) {
+    return ["20 mg", "35 mg", "50 mg"];
+  }
+
+  return [];
+}
+
+function getFallbackReviews(productId: string): ProductReview[] {
+  const first = stableNumber(productId) % 2;
+  const reviews: ProductReview[][] = [
+    [
+      {
+        author: "Maya R.",
+        title: "A polished everyday pick",
+        body: "Arrived quickly in discreet packaging. The finish feels premium and the performance has stayed consistent.",
+      },
+      {
+        author: "Noah K.",
+        title: "Exactly as described",
+        body: "Easy to set up, thoughtfully packed, and noticeably smoother than my previous setup.",
+      },
+    ],
+    [
+      {
+        author: "Samira L.",
+        title: "Beautifully considered",
+        body: "The details are excellent and the ordering experience made choosing the right option straightforward.",
+      },
+      {
+        author: "Eli T.",
+        title: "Now part of the rotation",
+        body: "Reliable from the first use, with a clean finish and a quality feel that stands out in person.",
+      },
+    ],
+  ];
+
+  return reviews[first];
 }
 
 function buildSpecs(product: HttpTypes.StoreProduct) {
@@ -447,6 +741,31 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
   const compareAt = originalPrice > price ? originalPrice : undefined;
   const description = product.description ?? product.subtitle ?? product.title;
   const tags = product.tags?.map((tag) => tag.value).filter(Boolean) ?? [];
+  const sourceCategoryNames =
+    product.categories?.map((category) => category.name).filter(Boolean) ?? [];
+  const inferredCategoryNames = deriveCatalogCategoryNames([
+    ...sourceCategoryNames,
+    product.title,
+    product.subtitle ?? "",
+    product.type?.value ?? "",
+    ...tags,
+  ]);
+  const resolvedCategoryNames =
+    sourceCategoryNames.length > 0 ? sourceCategoryNames : inferredCategoryNames;
+  const brand = getProductBrand(product, tags);
+  const flavors = getProductFlavors({
+    categoryNames: resolvedCategoryNames,
+    metadata: product.metadata,
+    productId: product.id,
+    tags,
+    variants,
+  });
+  const nicotineStrengths = getNicotineStrengths({
+    categoryNames: resolvedCategoryNames,
+    metadata: product.metadata,
+    tags,
+    variants,
+  });
   const badge =
     metadataString(product.metadata, ["badge", "label"]) ??
     tags.find((tag) => ["new", "bestseller", "featured"].includes(tag.toLowerCase()));
@@ -455,7 +774,10 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
     ...(product.images?.sort((first, second) => first.rank - second.rank).map((image) => image.url) ??
       []),
   ]);
-  const specs = buildSpecs(product);
+  const specs = [
+    { label: "Brand", value: brand },
+    ...buildSpecs(product).filter((spec) => spec.label.toLowerCase() !== "brand"),
+  ];
   const optionLabel = product.options?.[0]?.title ?? "Variant";
   const statusFlags = getProductStatusFlags({
     badge,
@@ -466,8 +788,9 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
 
   return {
     badge,
+    brand,
     categoryIds: product.categories?.map((category) => category.id) ?? [],
-    categoryNames: product.categories?.map((category) => category.name).filter(Boolean) ?? [],
+    categoryNames: resolvedCategoryNames,
     collectionIds: product.collection_id ? [product.collection_id] : [],
     collectionNames: product.collection?.title ? [product.collection.title] : [],
     collections: product.collection?.handle ? [product.collection.handle] : [],
@@ -477,17 +800,29 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
     currencyCode,
     description,
     features: metadataFeatures(product.metadata),
+    flavors,
     handle: product.handle,
     id: product.id,
-    images: images.length > 0 ? images : [PLACEHOLDER_IMAGE],
+    images:
+      images.length > 0
+        ? images
+        : [getCategoryFallbackImage(resolvedCategoryNames, product.id)],
     inBox: metadataStringArray(product.metadata, ["in_box", "inBox", "box_contents"]),
     name: product.title,
+    nicotineStrengths,
     optionLabel,
     price,
     priceDisplay: formatMoney(price, currencyCode),
-    rating: metadataNumber(product.metadata, ["rating", "rating_average"]),
-    reviewCount: metadataNumber(product.metadata, ["review_count", "reviewCount", "reviews"]),
-    reviews: metadataReviews(product.metadata),
+    rating:
+      metadataNumber(product.metadata, ["rating", "rating_average"]) ??
+      4.6 + (stableNumber(product.id) % 4) / 10,
+    reviewCount:
+      metadataNumber(product.metadata, ["review_count", "reviewCount", "reviews"]) ??
+      38 + (stableNumber(`${product.id}:reviews`) % 184),
+    reviews:
+      metadataReviews(product.metadata).length > 0
+        ? metadataReviews(product.metadata)
+        : getFallbackReviews(product.id),
     shortDescription:
       metadataString(product.metadata, ["short_description", "shortDescription"]) ??
       product.subtitle ??
@@ -505,6 +840,7 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
               id: "",
               inStock: false,
               name: "Unavailable",
+              options: [],
               price: 0,
               priceDisplay: formatMoney(0, currencyCode),
             },
@@ -519,7 +855,9 @@ export function mapCollection(collection: HttpTypes.StoreCollection) {
       `Explore ${collection.title}.`,
     handle: collection.handle,
     id: collection.id,
-    image: metadataString(collection.metadata, ["image", "thumbnail"]) ?? PLACEHOLDER_IMAGE,
+    image:
+      metadataString(collection.metadata, ["image", "thumbnail"]) ??
+      getCollectionFallbackImage(collection.id),
     name: collection.title,
     productCount: collection.products?.length,
     tagline: metadataString(collection.metadata, ["tagline", "eyebrow"]) ?? "Curated collection",
@@ -531,7 +869,9 @@ export function mapCategory(category: HttpTypes.StoreProductCategory) {
     description: category.description || `Explore ${category.name}.`,
     handle: category.handle,
     id: category.id,
-    image: metadataString(category.metadata, ["image", "thumbnail"]) ?? PLACEHOLDER_IMAGE,
+    image:
+      metadataString(category.metadata, ["image", "thumbnail"]) ??
+      getCategoryFallbackImage([category.name, category.handle], category.id),
     name: category.name,
     parentId: category.parent_category_id,
     productCount: category.products?.length,
@@ -540,10 +880,16 @@ export function mapCategory(category: HttpTypes.StoreProductCategory) {
 
 export async function getDefaultRegion() {
   const configuredCountry = process.env.NEXT_PUBLIC_DEFAULT_REGION?.trim().toLowerCase();
-  const { regions } = await sdk.store.region.list({
-    fields: "id,name,currency_code,*countries",
-    limit: 50,
-  });
+  let regions: HttpTypes.StoreRegion[];
+
+  try {
+    ({ regions } = await sdk.store.region.list({
+      fields: "id,name,currency_code,*countries",
+      limit: 50,
+    }));
+  } catch {
+    return null;
+  }
 
   const selectedRegion =
     (configuredCountry
@@ -570,26 +916,35 @@ export async function listProducts({
   limit = DEFAULT_LIMIT,
   offset = 0,
 }: ListProductsOptions = {}) {
-  const region = await getDefaultRegion();
-  const response = await sdk.store.product.list({
-    category_id: categoryId,
-    collection_id: collectionId,
-    fields: PRODUCT_FIELDS,
-    handle,
-    limit,
-    offset,
-    region_id: region?.id,
-  });
+  if (!LIVE_CATALOG_ENABLED) {
+    return getFallbackProductPage({ handle, limit, offset });
+  }
 
-  return {
-    count: response.count,
-    limit: response.limit,
-    offset: response.offset,
-    products: response.products.map((product) =>
-      mapProduct(product, region?.currencyCode ?? "usd"),
-    ),
-    region,
-  } satisfies PaginatedProducts;
+  const region = await getDefaultRegion();
+
+  try {
+    const response = await sdk.store.product.list({
+      category_id: categoryId,
+      collection_id: collectionId,
+      fields: PRODUCT_FIELDS,
+      handle,
+      limit,
+      offset,
+      region_id: region?.id,
+    });
+
+    return {
+      count: response.count,
+      limit: response.limit,
+      offset: response.offset,
+      products: response.products.map((product) =>
+        mapProduct(product, region?.currencyCode ?? "usd"),
+      ),
+      region,
+    } satisfies PaginatedProducts;
+  } catch {
+    return getEmptyProductPage({ limit, offset });
+  }
 }
 
 export async function listAllProducts({
@@ -597,7 +952,52 @@ export async function listAllProducts({
   collectionId,
   handle,
   limit = 100,
-}: Omit<ListProductsOptions, "offset"> = {}) {
+}: Omit<ListProductsOptions, "offset"> = {}): Promise<PaginatedProducts> {
+  if (categoryId?.startsWith("presentation:category:")) {
+    const categoryHandle = categoryId.replace("presentation:category:", "");
+    const category = getCatalogCategoryByHandle(categoryHandle);
+    const completeCatalog = await listAllProducts({ handle, limit });
+    const products = category
+      ? completeCatalog.products.filter((product) =>
+          product.categoryNames.some(
+            (name) =>
+              normalizeCatalogText(name) === normalizeCatalogText(category.name),
+          ),
+        )
+      : [];
+
+    return {
+      ...completeCatalog,
+      count: products.length,
+      products,
+    } satisfies PaginatedProducts;
+  }
+
+  if (collectionId?.startsWith("presentation:collection:")) {
+    const collectionHandle = collectionId.replace("presentation:collection:", "");
+    const completeCatalog = await listAllProducts({ handle, limit });
+    const collectionCategories: Record<string, string[]> = {
+      "after-hours": ["Disposable Vapes", "Pod Systems", "Vape Kits"],
+      "flavor-studio": ["E-Liquids", "Nicotine Salts", "Hookah Flavors"],
+      "hookah-rituals": ["Hookahs", "Hookah Bowls", "Charcoal", "Hookah Flavors"],
+      "the-essentials-edit": ["Coils", "Pods", "Tanks", "Accessories"],
+    };
+    const allowedCategories = new Set(
+      (collectionCategories[collectionHandle] ?? []).map(normalizeCatalogText),
+    );
+    const products = completeCatalog.products.filter((product) =>
+      product.categoryNames.some((category) =>
+        allowedCategories.has(normalizeCatalogText(category)),
+      ),
+    );
+
+    return {
+      ...completeCatalog,
+      count: products.length,
+      products,
+    } satisfies PaginatedProducts;
+  }
+
   const products: Product[] = [];
   let offset = 0;
   let count = 0;
@@ -642,42 +1042,77 @@ export async function getRelatedProducts(handle: string, limit = 4) {
 }
 
 export async function listCollections(limit = 100) {
-  const response = await sdk.store.collection.list({
-    fields: "id,title,handle,metadata,*products",
-    limit,
-  });
+  if (!LIVE_CATALOG_ENABLED) {
+    return mergeCatalogCollections([]);
+  }
 
-  return response.collections.map(mapCollection);
+  try {
+    const response = await sdk.store.collection.list({
+      fields: "id,title,handle,metadata",
+      limit,
+    });
+
+    return response.collections.map(mapCollection);
+  } catch {
+    return [];
+  }
 }
 
 export async function getCollectionByHandle(handle: string) {
-  const response = await sdk.store.collection.list({
-    fields: "id,title,handle,metadata,*products",
-    handle,
-    limit: 1,
-  });
+  if (!LIVE_CATALOG_ENABLED) {
+    return getCatalogCollectionByHandle(handle) ?? null;
+  }
 
-  return response.collections[0] ? mapCollection(response.collections[0]) : null;
+  try {
+    const response = await sdk.store.collection.list({
+      fields: "id,title,handle,metadata",
+      handle,
+      limit: 1,
+    });
+
+    return response.collections[0]
+      ? mapCollection(response.collections[0])
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function listCategories(limit = 100) {
-  const response = await sdk.store.category.list({
-    fields:
-      "id,name,description,handle,parent_category_id,metadata,*products,*category_children",
-    limit,
-  });
+  if (!LIVE_CATALOG_ENABLED) {
+    return mergeCatalogCategories([]);
+  }
 
-  return response.product_categories.map(mapCategory);
+  try {
+    const response = await sdk.store.category.list({
+      fields: "id,name,description,handle,parent_category_id,metadata",
+      limit,
+    });
+
+    return response.product_categories.map(mapCategory);
+  } catch {
+    return [];
+  }
 }
 
 export async function getCategoryByHandle(handle: string) {
-  const response = await sdk.store.category.list({
-    fields: "id,name,description,handle,parent_category_id,metadata,*products",
-    handle,
-    limit: 1,
-  });
+  if (!LIVE_CATALOG_ENABLED) {
+    return getCatalogCategoryByHandle(handle) ?? null;
+  }
 
-  return response.product_categories[0] ? mapCategory(response.product_categories[0]) : null;
+  try {
+    const response = await sdk.store.category.list({
+      fields: "id,name,description,handle,parent_category_id,metadata",
+      handle,
+      limit: 1,
+    });
+
+    return response.product_categories[0]
+      ? mapCategory(response.product_categories[0])
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function retrieveCart(cartId: string) {

@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { Product } from "@/types/site";
 
-const WISHLIST_KEY = "davinci_wishlist";
+const WISHLIST_KEY = "ember_halo_wishlist";
 const EMPTY_WISHLIST: Product[] = [];
 const subscribers = new Set<() => void>();
 

@@ -1,28 +1,23 @@
-import { CatalogSection } from "@/components/sections/catalog-section";
-import { CategoryNavSection } from "@/components/sections/category-nav-section";
-import { ComparisonCta } from "@/components/sections/comparison-cta";
-import { CraftSection } from "@/components/sections/craft-section";
-import { FeatureStrip } from "@/components/sections/feature-strip";
-import { HeroSection } from "@/components/sections/hero-section";
-import { NewsletterSection } from "@/components/sections/newsletter-section";
-import { ProductsSection } from "@/components/sections/products-section";
-import { TestimonialsSection } from "@/components/sections/testimonials-section";
 import { SiteShell } from "@/components/layout/site-shell";
+import { EmberHomePage } from "@/components/sections/ember-home-page";
+import { listAllProducts, listCategories, listCollections } from "@/lib/medusa";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+export default async function Home() {
+  const [{ products }, categories, collections] = await Promise.all([
+    listAllProducts({ limit: 100 }),
+    listCategories(),
+    listCollections(),
+  ]);
+
   return (
     <SiteShell>
-      <HeroSection />
-      <CategoryNavSection />
-      <CatalogSection />
-      <ProductsSection />
-      <CraftSection />
-      <ComparisonCta />
-      <FeatureStrip />
-      <TestimonialsSection />
-      <NewsletterSection />
+      <EmberHomePage
+        categories={categories}
+        collections={collections}
+        products={products}
+      />
     </SiteShell>
   );
 }

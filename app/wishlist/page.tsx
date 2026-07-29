@@ -3,7 +3,7 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { WishlistPage } from "@/components/sections/wishlist-page";
 
 export const metadata: Metadata = {
-  title: "Wishlist — DaVinci",
+  title: "Wishlist — Ember & Halo",
   description: "Products saved locally in this browser.",
 };
 

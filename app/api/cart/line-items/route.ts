@@ -24,7 +24,14 @@ async function getOrCreateCart() {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as AddLineItemBody;
+  let body: AddLineItemBody;
+
+  try {
+    body = (await request.json()) as AddLineItemBody;
+  } catch {
+    return NextResponse.json({ message: "Invalid cart payload" }, { status: 400 });
+  }
+
   const variantId = typeof body.variantId === "string" ? body.variantId : "";
   const quantity = typeof body.quantity === "number" ? body.quantity : 1;
 
@@ -36,9 +43,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "quantity must be a positive integer" }, { status: 400 });
   }
 
-  const cart = await getOrCreateCart();
-  const updatedCart = await addCartLineItem(cart.id, variantId, quantity);
-  await setCartIdCookie(updatedCart.id);
+  try {
+    const cart = await getOrCreateCart();
+    const updatedCart = await addCartLineItem(cart.id, variantId, quantity);
+    await setCartIdCookie(updatedCart.id);
 
-  return NextResponse.json({ cart: updatedCart });
+    return NextResponse.json({ cart: updatedCart });
+  } catch {
+    return NextResponse.json(
+      { message: "Cart service is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
 }

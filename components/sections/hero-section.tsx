@@ -11,10 +11,10 @@ export function HeroSection() {
     <section className="relative isolate min-h-[calc(100svh-6.75rem)] overflow-hidden border-b border-border bg-background">
       <div className="absolute inset-0">
         <Image
-          alt="DaVinci IQ-C precision device on stone"
+          alt="Ember & Halo premium hookah and vape collection"
           className="object-cover object-[66%_center] sm:object-center"
           fill
-          priority
+          preload
           sizes="100vw"
           src={hero.image}
         />

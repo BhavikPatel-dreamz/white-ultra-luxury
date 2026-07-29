@@ -12,8 +12,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Search - DaVinci",
-  description: "Search the DaVinci storefront catalog.",
+  title: "Search — Ember & Halo",
+  description: "Search the Ember & Halo vape and hookah catalog.",
 };
 
 type SearchRouteProps = {

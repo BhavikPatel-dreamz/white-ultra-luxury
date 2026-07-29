@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ember & Halo
 
-## Getting Started
+Ember & Halo is a premium, adult-only vape and hookah storefront built with Next.js and Medusa commerce services. Products, variants, regional prices, categories, collections, carts, shipping, payments, and orders use the configured Medusa Store API. A local showcase catalog remains available only as an explicitly enabled development mode.
 
-First, run the development server:
+## Run locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`. The age gate stores verification for 30 days.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Catalog modes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The configured Medusa catalog is the default source of truth. Set the Store API URL and publishable key:
 
-## Learn More
+```env
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://your-medusa-host.example
+NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=your_publishable_key
+NEXT_PUBLIC_DEFAULT_REGION=in
+```
 
-To learn more about Next.js, take a look at the following resources:
+`NEXT_PUBLIC_DEFAULT_REGION` is an ISO-2 country code attached to the intended Medusa region. To intentionally preview the bundled offline demo catalog, set `NEXT_PUBLIC_EMBER_HALO_LIVE_CATALOG=false`. Live checkout creates and completes Medusa carts and orders through the configured region, shipping, and payment providers.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Validation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Brand photography lives in `public/ember-halo`; the selected display, accent, and body fonts are bundled under `app/fonts` for network-independent builds.

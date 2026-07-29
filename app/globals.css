@@ -1,23 +1,26 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
-  --radius: 0.5rem;
-  --background: oklch(99% 0.006 90);
-  --foreground: oklch(20% 0.012 78);
-  --surface: oklch(96.8% 0.008 90);
-  --surface-elevated: oklch(100% 0 0);
-  --primary: oklch(42% 0.07 63);
-  --primary-foreground: oklch(99% 0.006 90);
-  --secondary: oklch(94.5% 0.006 90);
-  --secondary-foreground: oklch(20% 0.012 78);
-  --muted: oklch(91.8% 0.006 90);
-  --muted-foreground: oklch(49% 0.012 78);
-  --border: oklch(84.5% 0.008 88);
-  --input: oklch(89.5% 0.006 90);
-  --ring: oklch(42% 0.07 63 / 0.55);
-  --shadow-soft: 0 18px 48px oklch(20% 0.012 78 / 0.08);
-  --shadow-hover: 0 24px 64px oklch(20% 0.012 78 / 0.12);
+  --radius: 0.2rem;
+  --background: #090b10;
+  --foreground: #f2efe6;
+  --surface: #10131a;
+  --surface-elevated: #171b23;
+  --primary: #cbff47;
+  --primary-foreground: #090b10;
+  --secondary: #20242e;
+  --secondary-foreground: #f2efe6;
+  --muted: #282d38;
+  --muted-foreground: #9da3ae;
+  --border: color-mix(in srgb, #f2efe6 14%, transparent);
+  --input: color-mix(in srgb, #f2efe6 20%, transparent);
+  --ring: color-mix(in srgb, #cbff47 58%, transparent);
+  --violet: #8c6cff;
+  --coral: #ff735d;
+  --cream: #f2efe6;
+  --ink: #090b10;
+  --shadow-soft: 0 24px 80px rgb(0 0 0 / 0.32);
+  --shadow-hover: 0 28px 90px rgb(0 0 0 / 0.46);
 }
 
 @theme inline {
@@ -34,26 +37,52 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-violet: var(--violet);
+  --color-coral: var(--coral);
+  --color-cream: var(--cream);
+  --color-ink: var(--ink);
+  --font-sans: var(--font-eh-sans), "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-eh-display), "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-accent: var(--font-eh-accent), Georgia, serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
 }
 
 body {
+  min-width: 320px;
+  color-scheme: dark;
   text-rendering: optimizeLegibility;
-  background: var(--background);
+  background:
+    radial-gradient(circle at 85% -10%, rgb(140 108 255 / 0.09), transparent 28rem),
+    var(--background);
 }
 
 button,
 a,
 input,
-select {
+select,
+summary,
+textarea {
   -webkit-tap-highlight-color: transparent;
+}
+
+button,
+summary {
+  cursor: pointer;
 }
 
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+summary:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
@@ -63,21 +92,101 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+summary::-webkit-details-marker {
+  display: none;
 }
 
 ::selection {
-  background: var(--primary);
   color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid var(--background);
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+.font-editorial {
+  font-family: var(--font-display);
+}
+
+.font-accent {
+  font-family: var(--font-accent);
+}
+
+.eh-noise {
+  background-image: url("/noise.svg");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+}
+
+.eh-grid {
+  background-image:
+    linear-gradient(to right, rgb(242 239 230 / 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(242 239 230 / 0.045) 1px, transparent 1px);
+  background-size: 5.5rem 5.5rem;
 }
 
 .hero-grid {
   background-image:
-    linear-gradient(to right, oklch(20% 0.012 78 / 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, oklch(20% 0.012 78 / 0.045) 1px, transparent 1px);
+    linear-gradient(to right, rgb(242 239 230 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(242 239 230 / 0.04) 1px, transparent 1px);
   background-size: 7rem 7rem;
-  mask-image: linear-gradient(to right, black, transparent 72%);
+  mask-image: linear-gradient(to right, black, transparent 78%);
+}
+
+.eh-text-outline {
+  color: transparent;
+  -webkit-text-stroke: 1px rgb(242 239 230 / 0.54);
+}
+
+.eh-vertical-copy {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.eh-orbit {
+  animation: eh-orbit 18s linear infinite;
+}
+
+.eh-brand-slide {
+  animation: eh-brand-slide 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.eh-float {
+  animation: eh-float 7s ease-in-out infinite;
+}
+
+.eh-shine::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 25%, rgb(255 255 255 / 0.13) 45%, transparent 64%);
+  transform: translateX(-125%);
+  transition: transform 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.eh-shine:hover::after {
+  transform: translateX(125%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -111,13 +220,8 @@ h4 {
 }
 
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes gallery-in {
@@ -133,33 +237,55 @@ h4 {
 }
 
 @keyframes drawer-in {
-  from {
-    transform: translateX(100%);
-  }
-
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 
 @keyframes sheet-in {
-  from {
-    transform: translateY(100%);
-  }
-
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 @keyframes modal-in {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(24px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes eh-brand-slide {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
   }
 
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes eh-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes eh-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

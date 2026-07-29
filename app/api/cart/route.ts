@@ -23,10 +23,17 @@ export async function GET() {
 }
 
 export async function POST() {
-  const cart = await createCart();
-  await setCartIdCookie(cart.id);
+  try {
+    const cart = await createCart();
+    await setCartIdCookie(cart.id);
 
-  return NextResponse.json({ cart }, { status: 201 });
+    return NextResponse.json({ cart }, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { message: "Cart service is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
 }
 
 export async function DELETE() {

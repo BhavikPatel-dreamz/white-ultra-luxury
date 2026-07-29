@@ -18,15 +18,15 @@ export async function generateMetadata({
 
   if (!product) {
     return {
-      title: "Product not found \u2014 DaVinci",
+      title: "Product not found — Ember & Halo",
     };
   }
 
   return {
-    title: `${product.name} \u2014 DaVinci`,
+    title: `${product.name} — Ember & Halo`,
     description: product.shortDescription,
     openGraph: {
-      title: `${product.name} \u2014 DaVinci`,
+      title: `${product.name} — Ember & Halo`,
       description: product.shortDescription,
     },
   };

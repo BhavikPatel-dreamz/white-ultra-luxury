@@ -13,7 +13,14 @@ type UpdateLineItemBody = {
 export async function PATCH(request: Request, { params }: LineItemRouteContext) {
   const cartId = await getCartIdFromCookie();
   const { lineItemId } = await params;
-  const body = (await request.json()) as UpdateLineItemBody;
+  let body: UpdateLineItemBody;
+
+  try {
+    body = (await request.json()) as UpdateLineItemBody;
+  } catch {
+    return NextResponse.json({ message: "Invalid cart payload" }, { status: 400 });
+  }
+
   const quantity = typeof body.quantity === "number" ? body.quantity : 1;
 
   if (!cartId) {
@@ -24,9 +31,16 @@ export async function PATCH(request: Request, { params }: LineItemRouteContext) 
     return NextResponse.json({ message: "quantity must be a positive integer" }, { status: 400 });
   }
 
-  const cart = await updateCartLineItem(cartId, lineItemId, quantity);
+  try {
+    const cart = await updateCartLineItem(cartId, lineItemId, quantity);
 
-  return NextResponse.json({ cart });
+    return NextResponse.json({ cart });
+  } catch {
+    return NextResponse.json(
+      { message: "Cart service is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
 }
 
 export async function DELETE(_request: Request, { params }: LineItemRouteContext) {
@@ -37,7 +51,14 @@ export async function DELETE(_request: Request, { params }: LineItemRouteContext
     return NextResponse.json({ message: "Cart not found" }, { status: 404 });
   }
 
-  const cart = await deleteCartLineItem(cartId, lineItemId);
+  try {
+    const cart = await deleteCartLineItem(cartId, lineItemId);
 
-  return NextResponse.json({ cart });
+    return NextResponse.json({ cart });
+  } catch {
+    return NextResponse.json(
+      { message: "Cart service is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
 }

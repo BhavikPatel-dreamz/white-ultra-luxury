@@ -29,7 +29,7 @@ export function CraftDetailsSection() {
       <Container className="py-24 md:py-28">
         <div className="grid gap-10 md:grid-cols-[0.72fr_1.28fr] md:gap-20">
           <div>
-            <Eyebrow className="text-primary">Why DaVinci</Eyebrow>
+            <Eyebrow className="text-primary">Why Ember &amp; Halo</Eyebrow>
             <h2 className="mt-4 max-w-sm text-balance font-display text-4xl leading-[1.02] tracking-[-0.04em] md:text-5xl">
               Engineered different.
             </h2>

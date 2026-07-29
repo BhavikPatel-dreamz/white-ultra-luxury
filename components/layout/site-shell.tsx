@@ -24,17 +24,23 @@ function SiteShellContent({ children }: { children: ReactNode }) {
   const { count: wishlistCount } = useWishlist();
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-background">
-      <div className="relative flex min-h-screen flex-col">
-        <AnnouncementBar />
-        <Navbar
-          cartCount={itemCount}
-          onCartOpen={openCart}
-          wishlistCount={wishlistCount}
-        />
-        <main className="flex-1">{children}</main>
-        <Footer />
-      </div>
+    <div className="relative flex min-h-screen flex-col bg-background">
+      <a
+        className="fixed left-4 top-4 z-[120] -translate-y-24 bg-primary px-4 py-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform focus:translate-y-0"
+        href="#main-content"
+      >
+        Skip to content
+      </a>
+      <AnnouncementBar />
+      <Navbar
+        cartCount={itemCount}
+        onCartOpen={openCart}
+        wishlistCount={wishlistCount}
+      />
+      <main className="flex-1" id="main-content">
+        {children}
+      </main>
+      <Footer />
       <CartDrawer onClose={closeCart} open={isCartOpen} />
       <AgeGate />
     </div>

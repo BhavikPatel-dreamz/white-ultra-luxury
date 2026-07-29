@@ -1,19 +1,14 @@
 "use client";
 
-import {
-  type FormEvent,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { Product, ProductStatusFlag } from "@/types/site";
 import { ProductCard } from "@/components/sections/product-card";
-import { Button, buttonClasses } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
-import { Eyebrow } from "@/components/ui/section-title";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { useDialogAccessibility } from "@/hooks/use-dialog-accessibility";
 import { cx } from "@/lib/utils";
 
 type SortValue =
@@ -26,7 +21,8 @@ type SortValue =
   | "rating-desc"
   | "name-asc";
 
-type StockFilter = "all" | "in-stock" | "sold-out";
+type AvailabilityFilter = "all" | "in-stock" | "sold-out";
+type ViewMode = "grid" | "list";
 
 type ProductListingPageProps = {
   basePath: string;
@@ -46,30 +42,31 @@ type Option = {
 };
 
 type ListingState = {
+  availability: AvailabilityFilter;
+  brand: string;
   category: string;
-  collection: string;
+  flavor: string;
+  maxPrice: string;
+  minPrice: string;
+  nicotine: string;
   page: number;
   query: string;
   sort: SortValue;
-  status: ProductStatusFlag | "all";
-  stock: StockFilter;
+  view: ViewMode;
 };
 
 const defaultState: ListingState = {
+  availability: "all",
+  brand: "all",
   category: "all",
-  collection: "all",
+  flavor: "all",
+  maxPrice: "",
+  minPrice: "",
+  nicotine: "all",
   page: 1,
   query: "",
   sort: "recommended",
-  status: "all",
-  stock: "all",
-};
-
-const statusLabels: Record<ProductStatusFlag, string> = {
-  bestseller: "Bestseller",
-  featured: "Featured",
-  new: "New",
-  sale: "Sale",
+  view: "grid",
 };
 
 const validSorts: SortValue[] = [
@@ -82,20 +79,12 @@ const validSorts: SortValue[] = [
   "rating-desc",
   "name-asc",
 ];
+const validAvailability: AvailabilityFilter[] = ["all", "in-stock", "sold-out"];
+const validViews: ViewMode[] = ["grid", "list"];
 
-const validStatuses: Array<ProductStatusFlag | "all"> = [
-  "all",
-  "featured",
-  "bestseller",
-  "new",
-  "sale",
-];
-
-const validStocks: StockFilter[] = ["all", "in-stock", "sold-out"];
-
-function getUniqueOptions(values: string[]) {
-  return Array.from(new Set(values.filter(Boolean))).sort((first, second) =>
-    first.localeCompare(second),
+function uniqueOptions(values: Array<string | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value)))).sort(
+    (first, second) => first.localeCompare(second),
   );
 }
 
@@ -104,165 +93,100 @@ function hasStock(product: Product) {
 }
 
 function compareFlag(first: Product, second: Product, flag: ProductStatusFlag) {
-  const firstRank = first.statusFlags.includes(flag) ? 1 : 0;
-  const secondRank = second.statusFlags.includes(flag) ? 1 : 0;
-
-  return secondRank - firstRank;
+  return Number(second.statusFlags.includes(flag)) - Number(first.statusFlags.includes(flag));
 }
 
 function compareCreatedAt(first: Product, second: Product) {
-  const firstDate = first.createdAt ? Date.parse(first.createdAt) : 0;
-  const secondDate = second.createdAt ? Date.parse(second.createdAt) : 0;
-
-  return secondDate - firstDate;
+  return Date.parse(second.createdAt ?? "") - Date.parse(first.createdAt ?? "") || 0;
 }
 
 function sortProducts(items: Product[], sort: SortValue) {
   return [...items].sort((first, second) => {
-    if (sort === "featured") {
-      return compareFlag(first, second, "featured") || compareCreatedAt(first, second);
+    switch (sort) {
+      case "featured":
+        return compareFlag(first, second, "featured") || compareCreatedAt(first, second);
+      case "bestseller":
+        return (
+          compareFlag(first, second, "bestseller") ||
+          (second.reviewCount ?? 0) - (first.reviewCount ?? 0)
+        );
+      case "new":
+        return compareFlag(first, second, "new") || compareCreatedAt(first, second);
+      case "price-asc":
+        return first.price - second.price;
+      case "price-desc":
+        return second.price - first.price;
+      case "rating-desc":
+        return (second.rating ?? 0) - (first.rating ?? 0);
+      case "name-asc":
+        return first.name.localeCompare(second.name);
+      default:
+        return 0;
     }
-
-    if (sort === "bestseller") {
-      return (
-        compareFlag(first, second, "bestseller") ||
-        (second.reviewCount ?? 0) - (first.reviewCount ?? 0)
-      );
-    }
-
-    if (sort === "new") {
-      return compareFlag(first, second, "new") || compareCreatedAt(first, second);
-    }
-
-    if (sort === "price-asc") {
-      return first.price - second.price;
-    }
-
-    if (sort === "price-desc") {
-      return second.price - first.price;
-    }
-
-    if (sort === "rating-desc") {
-      return (second.rating ?? 0) - (first.rating ?? 0);
-    }
-
-    if (sort === "name-asc") {
-      return first.name.localeCompare(second.name);
-    }
-
-    return 0;
   });
 }
 
-function productMatchesQuery(product: Product, query: string) {
+function matchesQuery(product: Product, query: string) {
   if (!query) {
     return true;
   }
 
-  const haystack = [
+  return [
     product.name,
+    product.brand,
     product.subtitle,
     product.shortDescription,
     ...product.collectionNames,
     ...product.categoryNames,
+    ...product.flavors,
+    ...product.nicotineStrengths,
     ...product.tags,
   ]
     .join(" ")
-    .toLowerCase();
-
-  return haystack.includes(query.toLowerCase());
+    .toLowerCase()
+    .includes(query.toLowerCase());
 }
 
-function filterProducts({
-  category,
-  collection,
-  products,
-  query,
-  status,
-  stock,
-}: {
-  category: string;
-  collection: string;
-  products: Product[];
-  query: string;
-  status: ProductStatusFlag | "all";
-  stock: StockFilter;
-}) {
+function filterProducts(products: Product[], state: ListingState) {
+  const minimum = state.minPrice === "" ? Number.NEGATIVE_INFINITY : Number(state.minPrice);
+  const maximum = state.maxPrice === "" ? Number.POSITIVE_INFINITY : Number(state.maxPrice);
+
   return products.filter((product) => {
-    if (!productMatchesQuery(product, query)) {
+    if (!matchesQuery(product, state.query.trim())) return false;
+    if (state.category !== "all" && !product.categoryNames.includes(state.category)) return false;
+    if (state.brand !== "all" && product.brand !== state.brand) return false;
+    if (state.flavor !== "all" && !product.flavors.includes(state.flavor)) return false;
+    if (state.nicotine !== "all" && !product.nicotineStrengths.includes(state.nicotine)) {
       return false;
     }
-
-    if (status !== "all" && !product.statusFlags.includes(status)) {
-      return false;
-    }
-
-    if (collection !== "all" && !product.collectionNames.includes(collection)) {
-      return false;
-    }
-
-    if (category !== "all" && !product.categoryNames.includes(category)) {
-      return false;
-    }
-
-    if (stock === "in-stock" && !hasStock(product)) {
-      return false;
-    }
-
-    if (stock === "sold-out" && hasStock(product)) {
-      return false;
-    }
-
+    if (product.price < minimum || product.price > maximum) return false;
+    if (state.availability === "in-stock" && !hasStock(product)) return false;
+    if (state.availability === "sold-out" && hasStock(product)) return false;
     return true;
   });
 }
 
-function buildSortOptions(products: Product[]) {
-  const options: Option[] = [{ label: "Recommended", value: "recommended" }];
-  const hasFlag = (flag: ProductStatusFlag) =>
-    products.some((product) => product.statusFlags.includes(flag));
-
-  if (hasFlag("featured")) {
-    options.push({ label: "Featured", value: "featured" });
-  }
-
-  if (hasFlag("bestseller")) {
-    options.push({ label: "Bestseller", value: "bestseller" });
-  }
-
-  if (hasFlag("new")) {
-    options.push({ label: "New arrivals", value: "new" });
-  }
-
-  if (products.some((product) => product.rating)) {
-    options.push({ label: "Top rated", value: "rating-desc" });
-  }
-
-  return [
-    ...options,
-    { label: "Price: Low to High", value: "price-asc" },
-    { label: "Price: High to Low", value: "price-desc" },
-    { label: "Name: A to Z", value: "name-asc" },
-  ];
-}
-
 function readState(searchParams: URLSearchParams, fallbackPage: number): ListingState {
   const sort = searchParams.get("sort");
-  const status = searchParams.get("status");
-  const stock = searchParams.get("stock");
+  const availability = searchParams.get("availability");
+  const view = searchParams.get("view");
   const rawPage = Number(searchParams.get("page") ?? fallbackPage);
 
   return {
+    availability:
+      availability && validAvailability.includes(availability as AvailabilityFilter)
+        ? (availability as AvailabilityFilter)
+        : "all",
+    brand: searchParams.get("brand") || "all",
     category: searchParams.get("category") || "all",
-    collection: searchParams.get("collection") || "all",
+    flavor: searchParams.get("flavor") || "all",
+    maxPrice: searchParams.get("max") || "",
+    minPrice: searchParams.get("min") || "",
+    nicotine: searchParams.get("nicotine") || "all",
     page: Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1,
     query: searchParams.get("q") || "",
     sort: sort && validSorts.includes(sort as SortValue) ? (sort as SortValue) : "recommended",
-    status:
-      status && validStatuses.includes(status as ProductStatusFlag | "all")
-        ? (status as ProductStatusFlag | "all")
-        : "all",
-    stock: stock && validStocks.includes(stock as StockFilter) ? (stock as StockFilter) : "all",
+    view: view && validViews.includes(view as ViewMode) ? (view as ViewMode) : "grid",
   };
 }
 
@@ -270,35 +194,33 @@ function stateToParams(params: URLSearchParams, state: ListingState) {
   const entries: Array<[keyof ListingState, string]> = [
     ["query", "q"],
     ["sort", "sort"],
-    ["status", "status"],
-    ["collection", "collection"],
     ["category", "category"],
-    ["stock", "stock"],
+    ["brand", "brand"],
+    ["flavor", "flavor"],
+    ["nicotine", "nicotine"],
+    ["availability", "availability"],
+    ["minPrice", "min"],
+    ["maxPrice", "max"],
+    ["view", "view"],
   ];
 
-  entries.forEach(([stateKey, paramKey]) => {
+  for (const [stateKey, paramKey] of entries) {
     const value = state[stateKey];
-    const defaultValue = defaultState[stateKey];
+    const fallback = defaultState[stateKey];
 
-    if (value && value !== defaultValue) {
-      params.set(paramKey, String(value));
-    } else {
-      params.delete(paramKey);
-    }
-  });
-
-  if (state.page > 1) {
-    params.set("page", String(state.page));
-  } else {
-    params.delete("page");
+    if (value && value !== fallback) params.set(paramKey, String(value));
+    else params.delete(paramKey);
   }
+
+  if (state.page > 1) params.set("page", String(state.page));
+  else params.delete("page");
 }
 
 export function ProductListingPage({
   basePath,
   count,
   description,
-  emptyMessage = "Nothing matches those filters.",
+  emptyMessage = "Nothing matches that combination. Try opening the filters up a little.",
   eyebrow,
   limit,
   offset,
@@ -313,6 +235,12 @@ export function ProductListingPage({
     readState(new URLSearchParams(searchParams.toString()), initialPage),
   );
   const [searchDraft, setSearchDraft] = useState(state.query);
+  const filterCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const filterDialogRef = useDialogAccessibility<HTMLElement>(
+    filtersOpen,
+    () => setFiltersOpen(false),
+    filterCloseButtonRef,
+  );
 
   useBodyScrollLock(filtersOpen);
 
@@ -327,199 +255,224 @@ export function ProductListingPage({
     return () => window.removeEventListener("popstate", handlePopState);
   }, [initialPage]);
 
-  const statusOptions = (["featured", "bestseller", "new", "sale"] as const).filter((flag) =>
-    products.some((product) => product.statusFlags.includes(flag)),
+  const categoryOptions = uniqueOptions(products.flatMap((product) => product.categoryNames));
+  const brandOptions = uniqueOptions(products.map((product) => product.brand));
+  const flavorOptions = uniqueOptions(products.flatMap((product) => product.flavors));
+  const nicotineOptions = uniqueOptions(
+    products.flatMap((product) => product.nicotineStrengths),
   );
-  const collectionOptions = getUniqueOptions(
-    products.flatMap((product) => product.collectionNames),
-  );
-  const categoryOptions = getUniqueOptions(products.flatMap((product) => product.categoryNames));
-  const sortOptions = buildSortOptions(products);
+  const availablePrices = products.map((product) => product.price).filter((price) => price > 0);
+  const priceFloor = availablePrices.length ? Math.floor(Math.min(...availablePrices)) : 0;
+  const priceCeiling = availablePrices.length ? Math.ceil(Math.max(...availablePrices)) : 500;
   const filteredProducts = useMemo(
-    () =>
-      filterProducts({
-        category: state.category,
-        collection: state.collection,
-        products,
-        query: state.query.trim(),
-        status: state.status,
-        stock: state.stock,
-      }),
-    [products, state.category, state.collection, state.query, state.status, state.stock],
+    () => filterProducts(products, state),
+    [products, state],
   );
   const sortedProducts = useMemo(
     () => sortProducts(filteredProducts, state.sort),
     [filteredProducts, state.sort],
   );
-  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / limit));
-  const safeCurrentPage = Math.min(state.page, totalPages);
-  const pageStart = (safeCurrentPage - 1) * limit;
-  const pageProducts = sortedProducts.slice(pageStart, pageStart + limit);
+  const visibleProducts = sortedProducts.slice(0, state.page * limit);
+  const hasMore = visibleProducts.length < sortedProducts.length;
   const activeFilterCount = [
     state.query.trim(),
-    state.status !== "all",
-    state.collection !== "all",
     state.category !== "all",
-    state.stock !== "all",
+    state.brand !== "all",
+    state.flavor !== "all",
+    state.nicotine !== "all",
+    state.availability !== "all",
+    state.minPrice,
+    state.maxPrice,
   ].filter(Boolean).length;
 
   function updateUrl(nextState: ListingState) {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     const params = new URLSearchParams(window.location.search);
     stateToParams(params, nextState);
     const queryString = params.toString();
-    window.history.replaceState(null, "", `${pathname || basePath}${queryString ? `?${queryString}` : ""}`);
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname || basePath}${queryString ? `?${queryString}` : ""}`,
+    );
   }
 
-  function updateState(patch: Partial<ListingState>) {
+  function updateState(patch: Partial<ListingState>, resetPage = false) {
     setState((current) => {
-      const nextState = {
-        ...current,
-        ...patch,
-      };
-
+      const nextState = { ...current, ...patch, ...(resetPage ? { page: 1 } : {}) };
       updateUrl(nextState);
       return nextState;
     });
   }
 
-  function updateFilter(patch: Partial<ListingState>) {
-    updateState({ ...patch, page: 1 });
-  }
-
   function clearFilters() {
     setSearchDraft("");
-    updateFilter({
-      category: "all",
-      collection: "all",
-      query: "",
-      sort: "recommended",
-      status: "all",
-      stock: "all",
-    });
+    updateState(
+      {
+        availability: "all",
+        brand: "all",
+        category: "all",
+        flavor: "all",
+        maxPrice: "",
+        minPrice: "",
+        nicotine: "all",
+        query: "",
+      },
+      true,
+    );
   }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    updateFilter({ query: searchDraft.trim() });
+    updateState({ query: searchDraft.trim() }, true);
   }
+
+  const filterPanelProps = {
+    activeFilterCount,
+    brandOptions,
+    categoryOptions,
+    clearFilters,
+    flavorOptions,
+    nicotineOptions,
+    onSearchSubmit: submitSearch,
+    priceCeiling,
+    priceFloor,
+    searchDraft,
+    setSearchDraft,
+    state,
+    updateFilter: (patch: Partial<ListingState>) => updateState(patch, true),
+  };
 
   return (
     <>
-      <section className="border-b border-border bg-background">
-        <Container className="pb-10 pt-16 md:pb-12 md:pt-20">
-          <Eyebrow>{eyebrow}</Eyebrow>
-          <h1 className="mt-3 font-display text-5xl font-semibold leading-tight md:text-6xl">
-            {title}
-          </h1>
-          <p className="mt-4 max-w-2xl text-muted-foreground">{description}</p>
+      <section className="relative isolate overflow-hidden border-b border-border bg-foreground text-background">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-25 [background-image:radial-gradient(circle_at_78%_20%,color-mix(in_oklab,var(--primary)_65%,transparent),transparent_30%),linear-gradient(120deg,transparent_0%,color-mix(in_oklab,var(--background)_8%,transparent)_50%,transparent_51%)]"
+        />
+        <Container className="relative grid min-h-[22rem] items-end gap-10 pb-10 pt-24 md:grid-cols-[1fr_auto] md:pb-14 md:pt-32">
+          <div>
+            <div className="flex items-center gap-3 text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-background/55">
+              <span>Ember &amp; Halo</span>
+              <span className="h-px w-8 bg-primary" />
+              <span>{eyebrow}</span>
+            </div>
+            <h1 className="mt-5 max-w-4xl text-balance font-display text-5xl font-medium leading-[0.95] tracking-[-0.04em] sm:text-6xl md:text-8xl">
+              {title}
+            </h1>
+            <p className="mt-6 max-w-2xl text-sm leading-7 text-background/65 md:text-base">
+              {description}
+            </p>
+          </div>
+          <div className="hidden min-w-40 border-l border-background/15 pl-7 md:block">
+            <div className="font-display text-4xl tabular-nums">{String(count).padStart(2, "0")}</div>
+            <div className="mt-2 text-[0.65rem] uppercase tracking-[0.2em] text-background/50">
+              Pieces in the edit
+            </div>
+          </div>
         </Container>
       </section>
 
-      <section>
-        <Container className="grid gap-8 py-8 lg:grid-cols-[260px_1fr] lg:items-start lg:py-10">
+      <section className="bg-background">
+        <Container className="grid gap-8 py-7 lg:grid-cols-[16.5rem_minmax(0,1fr)] lg:items-start lg:py-12">
           <aside className="sticky top-28 hidden lg:block">
-            <FilterPanel
-              activeFilterCount={activeFilterCount}
-              categoryOptions={categoryOptions}
-              clearFilters={clearFilters}
-              collectionOptions={collectionOptions}
-              onSearchSubmit={submitSearch}
-              searchDraft={searchDraft}
-              setSearchDraft={setSearchDraft}
-              state={state}
-              statusOptions={statusOptions}
-              updateFilter={updateFilter}
-            />
+            <FilterPanel {...filterPanelProps} />
           </aside>
 
           <div className="min-w-0">
-            <div className="sticky top-[4.5rem] z-30 -mx-5 border-y border-border bg-background/92 px-5 py-3 backdrop-blur md:-mx-8 md:px-8 lg:static lg:mx-0 lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:px-0 lg:pt-0">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <Button
+            <div className="sticky top-[4.45rem] z-30 -mx-5 border-y border-border bg-background/90 px-5 py-3 backdrop-blur-xl md:-mx-8 md:px-8 lg:static lg:mx-0 lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:px-0 lg:pt-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
                   aria-expanded={filtersOpen}
-                  className="lg:hidden"
+                  className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-surface-elevated px-4 text-xs font-semibold uppercase tracking-[0.12em] transition-colors hover:border-primary lg:hidden"
                   onClick={() => setFiltersOpen(true)}
                   type="button"
-                  variant="secondary"
                 >
                   <Icon className="size-4" name="sliders-horizontal" />
-                  Filters
-                  {activeFilterCount > 0 ? (
-                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[0.65rem] text-primary-foreground">
+                  Filter
+                  {activeFilterCount ? (
+                    <span className="grid size-5 place-items-center rounded-full bg-primary text-[0.62rem] text-primary-foreground">
                       {activeFilterCount}
                     </span>
                   ) : null}
-                </Button>
+                </button>
 
-                <div className="text-xs text-muted-foreground">
-                  {sortedProducts.length === count
-                    ? `${count} products`
-                    : `${sortedProducts.length} of ${count} products`}
-                </div>
+                <p aria-live="polite" className="mr-auto text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{sortedProducts.length}</span>{" "}
+                  {sortedProducts.length === 1 ? "result" : "results"}
+                </p>
 
-                <label className={buttonClasses("secondary", "cursor-pointer px-3 py-2")}>
-                  <Icon className="size-4" name="arrow-up-down" />
+                <label className="relative">
+                  <span className="sr-only">Sort products</span>
                   <select
-                    aria-label="Sort products"
-                    className="border-0 bg-transparent text-sm text-foreground focus:outline-none"
-                    onChange={(event) => updateFilter({ sort: event.target.value as SortValue })}
+                    className="h-11 appearance-none rounded-full border border-border bg-surface-elevated py-0 pl-4 pr-10 text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary focus:border-primary"
+                    onChange={(event) =>
+                      updateState({ sort: event.target.value as SortValue }, true)
+                    }
                     value={state.sort}
                   >
-                    {sortOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
+                    <option value="recommended">Recommended</option>
+                    <option value="featured">Featured first</option>
+                    <option value="bestseller">Best sellers</option>
+                    <option value="new">Newest</option>
+                    <option value="rating-desc">Top rated</option>
+                    <option value="price-asc">Price: low to high</option>
+                    <option value="price-desc">Price: high to low</option>
+                    <option value="name-asc">Name: A–Z</option>
                   </select>
+                  <Icon
+                    className="pointer-events-none absolute right-3.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                    name="chevron-down"
+                  />
                 </label>
+
+                <ViewToggle
+                  onChange={(view) => updateState({ view })}
+                  value={state.view}
+                />
               </div>
             </div>
 
-            {pageProducts.length === 0 ? (
+            {visibleProducts.length ? (
+              <div
+                className={cx(
+                  "mt-7",
+                  state.view === "grid"
+                    ? "grid grid-cols-2 gap-x-3 gap-y-9 sm:gap-x-5 md:grid-cols-3 xl:grid-cols-4"
+                    : "grid gap-4",
+                )}
+              >
+                {visibleProducts.map((product, index) => (
+                  <ProductCard
+                    index={index}
+                    key={product.id}
+                    layout={state.view}
+                    product={product}
+                  />
+                ))}
+              </div>
+            ) : (
               <NoResults
                 clearFilters={clearFilters}
                 emptyMessage={emptyMessage}
                 hasFilters={activeFilterCount > 0}
               />
-            ) : (
-              <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 xl:grid-cols-4">
-                {pageProducts.map((product, index) => (
-                  <ProductCard index={index} key={product.id} product={product} />
-                ))}
-              </div>
             )}
 
-            {totalPages > 1 ? (
-              <nav
-                aria-label="Product pagination"
-                className="mt-12 flex items-center justify-center gap-3 text-sm"
-              >
-                <button
-                  className={buttonClasses("secondary", safeCurrentPage <= 1 ? "pointer-events-none opacity-40" : "")}
-                  disabled={safeCurrentPage <= 1}
-                  onClick={() => updateState({ page: Math.max(1, safeCurrentPage - 1) })}
+            {hasMore ? (
+              <div className="mt-14 border-t border-border pt-8 text-center">
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Showing {visibleProducts.length} of {sortedProducts.length}
+                </p>
+                <Button
+                  className="min-w-48 rounded-full"
+                  onClick={() => updateState({ page: state.page + 1 })}
                   type="button"
+                  variant="secondary"
                 >
-                  Previous
-                </button>
-
-                <span className="text-xs text-muted-foreground">
-                  Page {safeCurrentPage} of {totalPages}
-                </span>
-
-                <button
-                  className={buttonClasses("secondary", safeCurrentPage >= totalPages ? "pointer-events-none opacity-40" : "")}
-                  disabled={safeCurrentPage >= totalPages}
-                  onClick={() => updateState({ page: Math.min(totalPages, safeCurrentPage + 1) })}
-                  type="button"
-                >
-                  Next
-                </button>
-              </nav>
+                  Load more
+                  <Icon className="size-4 rotate-90" name="arrow-right" />
+                </Button>
+              </div>
             ) : null}
           </div>
         </Container>
@@ -529,39 +482,43 @@ export function ProductListingPage({
         <>
           <button
             aria-label="Close filters"
-            className="fixed inset-0 z-50 animate-[fade-in_180ms_ease-out_both] bg-foreground/20 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-50 bg-foreground/65 backdrop-blur-sm lg:hidden"
             onClick={() => setFiltersOpen(false)}
             type="button"
           />
           <aside
             aria-label="Product filters"
             aria-modal="true"
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[88svh] overflow-y-auto rounded-t-[var(--radius)] border border-border bg-surface-elevated p-5 shadow-[var(--shadow-soft)] animate-[sheet-in_260ms_cubic-bezier(.22,1,.36,1)_both] lg:hidden"
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[90svh] overflow-y-auto rounded-t-[2rem] border border-border bg-background px-5 pb-8 pt-5 shadow-2xl animate-[sheet-in_260ms_cubic-bezier(.22,1,.36,1)_both] lg:hidden"
+            ref={filterDialogRef}
             role="dialog"
+            tabIndex={-1}
           >
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between border-b border-border pb-4">
               <div>
-                <Eyebrow>Filters</Eyebrow>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {activeFilterCount} active
-                </div>
+                <p className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary">
+                  Refine the edit
+                </p>
+                <h2 className="mt-1 font-display text-2xl">Filters</h2>
               </div>
-              <Button aria-label="Close filters" className="size-10 rounded-full px-0 py-0" onClick={() => setFiltersOpen(false)} type="button" variant="ghost">
+              <button
+                aria-label="Close filters"
+                className="grid size-11 place-items-center rounded-full border border-border"
+                onClick={() => setFiltersOpen(false)}
+                ref={filterCloseButtonRef}
+                type="button"
+              >
                 <Icon className="size-4" name="x" />
-              </Button>
+              </button>
             </div>
-            <FilterPanel
-              activeFilterCount={activeFilterCount}
-              categoryOptions={categoryOptions}
-              clearFilters={clearFilters}
-              collectionOptions={collectionOptions}
-              onSearchSubmit={submitSearch}
-              searchDraft={searchDraft}
-              setSearchDraft={setSearchDraft}
-              state={state}
-              statusOptions={statusOptions}
-              updateFilter={updateFilter}
-            />
+            <FilterPanel {...filterPanelProps} compact />
+            <Button
+              className="mt-5 w-full rounded-full"
+              onClick={() => setFiltersOpen(false)}
+              type="button"
+            >
+              Show {sortedProducts.length} products
+            </Button>
           </aside>
         </>
       ) : null}
@@ -571,58 +528,81 @@ export function ProductListingPage({
 
 function FilterPanel({
   activeFilterCount,
+  brandOptions,
   categoryOptions,
   clearFilters,
-  collectionOptions,
+  compact = false,
+  flavorOptions,
+  nicotineOptions,
   onSearchSubmit,
+  priceCeiling,
+  priceFloor,
   searchDraft,
   setSearchDraft,
   state,
-  statusOptions,
   updateFilter,
 }: {
   activeFilterCount: number;
+  brandOptions: string[];
   categoryOptions: string[];
   clearFilters: () => void;
-  collectionOptions: string[];
+  compact?: boolean;
+  flavorOptions: string[];
+  nicotineOptions: string[];
   onSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  priceCeiling: number;
+  priceFloor: number;
   searchDraft: string;
   setSearchDraft: (value: string) => void;
   state: ListingState;
-  statusOptions: ProductStatusFlag[];
   updateFilter: (patch: Partial<ListingState>) => void;
 }) {
   return (
-    <div className="space-y-6 rounded-[var(--radius)] border border-border bg-surface-elevated p-5">
-      <div className="flex items-center justify-between">
-        <Eyebrow>Refine</Eyebrow>
-        {activeFilterCount > 0 ? (
-          <button
-            className="text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
-            onClick={clearFilters}
-            type="button"
-          >
-            Clear
-          </button>
-        ) : null}
-      </div>
+    <div className={cx("overflow-hidden", compact ? "" : "border-t border-border")}>
+      {!compact ? (
+        <div className="flex items-center justify-between border-b border-border py-4">
+          <div>
+            <p className="text-[0.64rem] font-semibold uppercase tracking-[0.2em] text-primary">
+              Curate your shelf
+            </p>
+            <h2 className="mt-1 font-display text-xl">Refine</h2>
+          </div>
+          {activeFilterCount ? (
+            <button
+              className="text-xs font-semibold text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-primary"
+              onClick={clearFilters}
+              type="button"
+            >
+              Clear {activeFilterCount}
+            </button>
+          ) : null}
+        </div>
+      ) : activeFilterCount ? (
+        <button
+          className="mb-2 text-xs font-semibold text-primary"
+          onClick={clearFilters}
+          type="button"
+        >
+          Clear all ({activeFilterCount})
+        </button>
+      ) : null}
 
-      <form className="space-y-2" onSubmit={onSearchSubmit}>
-        <label className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground" htmlFor="catalog-search">
-          Search
+      <form className="border-b border-border py-5" onSubmit={onSearchSubmit}>
+        <label className="text-[0.65rem] font-semibold uppercase tracking-[0.16em]" htmlFor={compact ? "catalog-search-mobile" : "catalog-search"}>
+          Search within results
         </label>
-        <div className="flex overflow-hidden rounded-[var(--radius)] border border-border bg-background">
+        <div className="mt-3 flex h-11 overflow-hidden rounded-full border border-border bg-surface-elevated focus-within:border-primary">
           <input
-            className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            id="catalog-search"
+            className="min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-muted-foreground"
+            id={compact ? "catalog-search-mobile" : "catalog-search"}
             onChange={(event) => setSearchDraft(event.target.value)}
-            placeholder="Name, category, tag"
+            placeholder="Product, flavor, brand"
             type="search"
             value={searchDraft}
           />
           <button
             aria-label="Apply search"
-            className="grid size-11 place-items-center border-l border-border text-muted-foreground transition-colors hover:text-primary"
+            className="grid w-11 place-items-center text-muted-foreground transition-colors hover:text-primary"
             type="submit"
           >
             <Icon className="size-4" name="search" />
@@ -630,85 +610,191 @@ function FilterPanel({
         </div>
       </form>
 
-      {statusOptions.length > 0 ? (
-        <FilterSelect
-          label="Status"
-          onChange={(value) => updateFilter({ status: value as ProductStatusFlag | "all" })}
-          options={statusOptions.map((flag) => ({
-            label: statusLabels[flag],
-            value: flag,
-          }))}
-          value={state.status}
-        />
-      ) : null}
-
-      {collectionOptions.length > 1 ? (
-        <FilterSelect
-          label="Collection"
-          onChange={(value) => updateFilter({ collection: value })}
-          options={collectionOptions.map((option) => ({
-            label: option,
-            value: option,
-          }))}
-          value={state.collection}
-        />
-      ) : null}
-
-      {categoryOptions.length > 1 ? (
-        <FilterSelect
-          label="Category"
-          onChange={(value) => updateFilter({ category: value })}
-          options={categoryOptions.map((option) => ({
-            label: option,
-            value: option,
-          }))}
-          value={state.category}
-        />
-      ) : null}
-
+      <FilterSelect
+        label="Category"
+        onChange={(category) => updateFilter({ category })}
+        options={categoryOptions.map((value) => ({ label: value, value }))}
+        value={state.category}
+      />
+      <FilterSelect
+        label="Brand"
+        onChange={(brand) => updateFilter({ brand })}
+        options={brandOptions.map((value) => ({ label: value, value }))}
+        value={state.brand}
+      />
+      <PriceFilter
+        ceiling={priceCeiling}
+        floor={priceFloor}
+        maxPrice={state.maxPrice}
+        minPrice={state.minPrice}
+        onChange={(minPrice, maxPrice) => updateFilter({ maxPrice, minPrice })}
+      />
+      <FilterSelect
+        emptyLabel="No flavor options in this edit"
+        label="Flavor"
+        onChange={(flavor) => updateFilter({ flavor })}
+        options={flavorOptions.map((value) => ({ label: value, value }))}
+        value={state.flavor}
+      />
+      <FilterSelect
+        emptyLabel="Not applicable to this edit"
+        label="Nicotine strength"
+        onChange={(nicotine) => updateFilter({ nicotine })}
+        options={nicotineOptions.map((value) => ({ label: value, value }))}
+        value={state.nicotine}
+      />
       <FilterSelect
         label="Availability"
-        onChange={(value) => updateFilter({ stock: value as StockFilter })}
+        onChange={(availability) =>
+          updateFilter({ availability: availability as AvailabilityFilter })
+        }
         options={[
-          { label: "In stock", value: "in-stock" },
+          { label: "Ready to ship", value: "in-stock" },
           { label: "Sold out", value: "sold-out" },
         ]}
-        value={state.stock}
+        value={state.availability}
       />
     </div>
   );
 }
 
 function FilterSelect({
+  emptyLabel,
   label,
   onChange,
   options,
   value,
 }: {
+  emptyLabel?: string;
   label: string;
   onChange: (value: string) => void;
   options: Option[];
   value: string;
 }) {
   return (
-    <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-      {label}
-      <select
-        className={cx(
-          "h-11 rounded-[var(--radius)] border border-border bg-background px-3 text-sm normal-case tracking-normal text-foreground outline-none transition-colors",
-          "focus:border-primary",
+    <details className="group border-b border-border py-5" open>
+      <summary className="flex cursor-pointer list-none items-center justify-between text-[0.67rem] font-semibold uppercase tracking-[0.16em] [&::-webkit-details-marker]:hidden">
+        {label}
+        <Icon className="size-3.5 transition-transform group-open:rotate-180" name="chevron-down" />
+      </summary>
+      <div className="mt-4">
+        {options.length ? (
+          <label className="relative block">
+            <span className="sr-only">Choose {label.toLowerCase()}</span>
+            <select
+              className="h-11 w-full appearance-none rounded-full border border-border bg-surface-elevated py-0 pl-4 pr-10 text-sm outline-none transition-colors hover:border-primary focus:border-primary"
+              onChange={(event) => onChange(event.target.value)}
+              value={value}
+            >
+              <option value="all">All {label.toLowerCase()}</option>
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Icon
+              className="pointer-events-none absolute right-3.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+              name="chevron-down"
+            />
+          </label>
+        ) : (
+          <p className="text-xs leading-5 text-muted-foreground">{emptyLabel}</p>
         )}
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        <option value="all">All</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      </div>
+    </details>
+  );
+}
+
+function PriceFilter({
+  ceiling,
+  floor,
+  maxPrice,
+  minPrice,
+  onChange,
+}: {
+  ceiling: number;
+  floor: number;
+  maxPrice: string;
+  minPrice: string;
+  onChange: (minimum: string, maximum: string) => void;
+}) {
+  return (
+    <details className="group border-b border-border py-5" open>
+      <summary className="flex cursor-pointer list-none items-center justify-between text-[0.67rem] font-semibold uppercase tracking-[0.16em] [&::-webkit-details-marker]:hidden">
+        Price
+        <Icon className="size-3.5 transition-transform group-open:rotate-180" name="chevron-down" />
+      </summary>
+      <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <label className="relative">
+          <span className="sr-only">Minimum price</span>
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+          <input
+            className="h-11 w-full rounded-full border border-border bg-surface-elevated pl-7 pr-2 text-sm tabular-nums outline-none focus:border-primary"
+            max={ceiling}
+            min={floor}
+            onChange={(event) => onChange(event.target.value, maxPrice)}
+            placeholder={String(floor)}
+            type="number"
+            value={minPrice}
+          />
+        </label>
+        <span className="h-px w-3 bg-border" />
+        <label className="relative">
+          <span className="sr-only">Maximum price</span>
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+          <input
+            className="h-11 w-full rounded-full border border-border bg-surface-elevated pl-7 pr-2 text-sm tabular-nums outline-none focus:border-primary"
+            max={ceiling}
+            min={floor}
+            onChange={(event) => onChange(minPrice, event.target.value)}
+            placeholder={String(ceiling)}
+            type="number"
+            value={maxPrice}
+          />
+        </label>
+      </div>
+    </details>
+  );
+}
+
+function ViewToggle({
+  onChange,
+  value,
+}: {
+  onChange: (value: ViewMode) => void;
+  value: ViewMode;
+}) {
+  return (
+    <div className="hidden h-11 items-center rounded-full border border-border bg-surface-elevated p-1 sm:flex">
+      {(["grid", "list"] as const).map((mode) => (
+        <button
+          aria-label={`${mode === "grid" ? "Grid" : "List"} view`}
+          aria-pressed={value === mode}
+          className={cx(
+            "grid size-8 place-items-center rounded-full transition-colors",
+            value === mode ? "bg-foreground text-background" : "text-muted-foreground",
+          )}
+          key={mode}
+          onClick={() => onChange(mode)}
+          type="button"
+        >
+          {mode === "grid" ? (
+            <span aria-hidden="true" className="grid grid-cols-2 gap-0.5">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <span className="size-1 rounded-[1px] bg-current" key={index} />
+              ))}
+            </span>
+          ) : (
+            <span aria-hidden="true" className="grid gap-0.5">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <span className="h-px w-3 bg-current" key={index} />
+              ))}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -722,15 +808,15 @@ function NoResults({
   hasFilters: boolean;
 }) {
   return (
-    <div className="mt-6 flex min-h-[24rem] flex-col items-center justify-center rounded-[var(--radius)] border border-border bg-surface-elevated px-6 py-20 text-center">
-      <Icon className="size-8 text-muted-foreground" name="search" />
-      <h2 className="mt-5 font-display text-2xl font-semibold">No matching products</h2>
-      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        {emptyMessage}
-      </p>
+    <div className="mt-7 flex min-h-[28rem] flex-col items-center justify-center border border-dashed border-border bg-surface px-6 text-center">
+      <span className="grid size-14 place-items-center rounded-full border border-border bg-background">
+        <Icon className="size-5 text-primary" name="search" />
+      </span>
+      <h2 className="mt-6 font-display text-3xl">No match in this edit</h2>
+      <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">{emptyMessage}</p>
       {hasFilters ? (
-        <Button className="mt-6" onClick={clearFilters} type="button" variant="secondary">
-          Clear filters
+        <Button className="mt-7 rounded-full" onClick={clearFilters} type="button" variant="secondary">
+          Reset filters
         </Button>
       ) : null}
     </div>

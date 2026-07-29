@@ -3,8 +3,8 @@ import { CartPage } from "@/components/cart/cart-page";
 import { SiteShell } from "@/components/layout/site-shell";
 
 export const metadata: Metadata = {
-  title: "Cart - DaVinci",
-  description: "Review your DaVinci storefront cart.",
+  title: "Cart — Ember & Halo",
+  description: "Review your Ember & Halo storefront cart.",
 };
 
 export default function CartRoute() {

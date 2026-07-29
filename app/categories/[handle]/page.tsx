@@ -25,12 +25,12 @@ export async function generateMetadata({
 
   if (!category) {
     return {
-      title: "Category not found \u2014 DaVinci",
+      title: "Category not found — Ember & Halo",
     };
   }
 
   return {
-    title: `${category.name} \u2014 DaVinci`,
+    title: `${category.name} — Ember & Halo`,
     description: category.description,
   };
 }

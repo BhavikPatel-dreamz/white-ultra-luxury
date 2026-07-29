@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Products \u2014 DaVinci",
+  title: "Products — Ember & Halo",
   description: "Browse every product from the Medusa catalog.",
 };
 

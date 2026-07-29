@@ -6,8 +6,8 @@ import { listCollections } from "@/lib/medusa";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "All Collections \u2014 DaVinci",
-  description: "Portable and desktop vaporizers, and every accessory.",
+  title: "All Collections — Ember & Halo",
+  description: "Curated vape, flavor, hookah, and everyday essentials for the modern ritual.",
 };
 
 export default async function CollectionsRoute() {

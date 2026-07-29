@@ -65,6 +65,14 @@ export type ProductVariant = {
   price: number;
   priceDisplay: string;
   inStock: boolean;
+  options: ProductVariantOption[];
+  flavor?: string;
+  nicotineStrength?: string;
+};
+
+export type ProductVariantOption = {
+  name: string;
+  value: string;
 };
 
 export type ProductSpec = {
@@ -89,6 +97,7 @@ export type Product = {
   id: string;
   handle: string;
   name: string;
+  brand: string;
   subtitle: string;
   createdAt?: string;
   price: number;
@@ -105,6 +114,8 @@ export type Product = {
   collectionIds: string[];
   categoryIds: string[];
   categoryNames: string[];
+  flavors: string[];
+  nicotineStrengths: string[];
   statusFlags: ProductStatusFlag[];
   variants: ProductVariant[];
   optionLabel: string;

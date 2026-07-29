@@ -3,67 +3,74 @@ import Link from "next/link";
 import type { Collection } from "@/types/site";
 import { Icon } from "@/components/ui/icon";
 import { Reveal } from "@/components/ui/reveal";
-import { Eyebrow } from "@/components/ui/section-title";
+import { cx } from "@/lib/utils";
 
 export function CollectionCard({
   collection,
+  ctaLabel,
+  featured = false,
   index,
   reveal = true,
   showDescription = false,
-  ctaLabel,
 }: {
   collection: Collection;
+  ctaLabel?: string;
+  featured?: boolean;
   index: number;
   reveal?: boolean;
   showDescription?: boolean;
-  ctaLabel?: string;
 }) {
-  const delay = [0, 80, 150][index] ?? 0;
+  const delay = ([0, 80, 150, 200] as const)[index % 4];
   const card = (
     <Link
-      className="group block overflow-hidden rounded-[var(--radius)] border border-border bg-surface-elevated transition-[box-shadow,transform,border-color] duration-300 hover:-translate-y-1 hover:border-primary hover:shadow-[var(--shadow-hover)]"
+      className={cx(
+        "group relative isolate block min-h-[30rem] overflow-hidden rounded-[1.5rem] border border-white/10 bg-foreground text-white",
+        featured ? "md:col-span-2 md:min-h-[38rem]" : "md:min-h-[32rem]",
+      )}
       href={`/collections/${collection.handle}`}
     >
-      <div className="relative aspect-[4/5] bg-surface">
-        <Image
-          alt={collection.name}
-          className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
-          fill
-          sizes="(min-width: 768px) 33vw, 100vw"
-          src={collection.image}
-        />
+      <Image
+        alt={collection.name}
+        className="object-cover transition-transform duration-1000 ease-out group-hover:scale-[1.04]"
+        fill
+        sizes={featured ? "(min-width: 768px) 66vw, 100vw" : "(min-width: 768px) 33vw, 100vw"}
+        src={collection.image}
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.78))]" />
+
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between p-6">
+        <span className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-white/70">
+          Collection {String(index + 1).padStart(2, "0")}
+        </span>
+        <span className="grid size-11 place-items-center rounded-full border border-white/25 bg-black/10 backdrop-blur-md transition-[background,color,transform] group-hover:rotate-45 group-hover:bg-white group-hover:text-black">
+          <Icon className="size-4" name="arrow-up-right" />
+        </span>
       </div>
-      <div className="p-5 md:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Eyebrow className="text-primary">{collection.tagline}</Eyebrow>
-            <h3 className="mt-2 font-display text-2xl md:text-3xl">
-              {collection.name}
-            </h3>
-          </div>
-          <span className="grid size-9 shrink-0 place-items-center rounded-full border border-border bg-background transition-colors group-hover:border-primary group-hover:text-primary">
-            <Icon className="size-3.5" name="arrow-up-right" />
-          </span>
-        </div>
+
+      <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
+        <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-primary">
+          {collection.tagline}
+        </p>
+        <h3
+          className={cx(
+            "mt-3 max-w-2xl font-display font-medium leading-[0.95] tracking-[-0.04em]",
+            featured ? "text-5xl sm:text-6xl" : "text-4xl",
+          )}
+        >
+          {collection.name}
+        </h3>
         {showDescription ? (
-          <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
+          <p className="mt-4 max-w-xl text-sm leading-6 text-white/65">
             {collection.description}
           </p>
         ) : null}
-        <div className="mt-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-          {ctaLabel ?? `Shop ${collection.name.toLowerCase()}`}
-          <Icon
-            className="size-4 transition-transform duration-200 group-hover:translate-x-1"
-            name="arrow-right"
-          />
+        <div className="mt-6 inline-flex items-center gap-3 text-[0.65rem] font-semibold uppercase tracking-[0.16em]">
+          {ctaLabel ?? "Explore the edit"}
+          <span className="h-px w-8 bg-white/50 transition-[width,background] group-hover:w-12 group-hover:bg-primary" />
         </div>
       </div>
     </Link>
   );
 
-  if (!reveal) {
-    return card;
-  }
-
-  return <Reveal delay={delay as 0 | 80 | 150}>{card}</Reveal>;
+  return reveal ? <Reveal delay={delay}>{card}</Reveal> : card;
 }

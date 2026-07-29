@@ -3,7 +3,7 @@ import { CheckoutPage } from "@/components/checkout/checkout-page";
 import { SiteShell } from "@/components/layout/site-shell";
 
 export const metadata: Metadata = {
-  title: "Checkout - DaVinci",
+  title: "Checkout — Ember & Halo",
   description: "Complete a local demo checkout from your cart.",
 };
 
