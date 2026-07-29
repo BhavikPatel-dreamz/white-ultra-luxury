@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
-import { collections as fallbackCollections } from "@/lib/data";
-import { listCategories, listCollections } from "@/lib/medusa";
+import { listCatalogTaxonomy } from "@/lib/medusa";
 
 export async function CategoryNavSection() {
-  const [categories, collections] = await Promise.all([
-    listCategories().catch(() => []),
-    listCollections().catch(() => fallbackCollections),
-  ]);
+  const { categories, collections } = await listCatalogTaxonomy().catch(() => ({
+    categories: [],
+    collections: [],
+  }));
   const items = [
     ...categories.slice(0, 6).map((category) => ({
       detail: category.productCount ? `${category.productCount} items` : "Category",

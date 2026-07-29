@@ -1,7 +1,6 @@
 import type {
   Collection,
   FooterGroup,
-  NavItem,
   Product,
   Stat,
   Testimonial,

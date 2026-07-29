@@ -87,7 +87,7 @@ export function ProductCardAddToCartButton({
       {...props}
     >
       <Icon
-        className={cx("size-4", added ? "text-primary" : "")}
+        className={cx("size-4", added ? "text-primary" : "text-black")}
         name={added ? "check" : "shopping-bag"}
       />
     </button>

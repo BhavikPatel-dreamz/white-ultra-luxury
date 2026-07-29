@@ -21,7 +21,9 @@ NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=your_publishable_key
 NEXT_PUBLIC_DEFAULT_REGION=in
 ```
 
-`NEXT_PUBLIC_DEFAULT_REGION` is an ISO-2 country code attached to the intended Medusa region. To intentionally preview the bundled offline demo catalog, set `NEXT_PUBLIC_EMBER_HALO_LIVE_CATALOG=false`. Live checkout creates and completes Medusa carts and orders through the configured region, shipping, and payment providers.
+`NEXT_PUBLIC_DEFAULT_REGION` is an ISO-2 country code attached to the preferred Medusa region. If that region has no calculated prices for the publishable-key-visible catalog, the storefront selects the first configured region that does, so missing prices are never presented as zero. To intentionally preview the bundled offline demo catalog, set `NEXT_PUBLIC_EMBER_HALO_LIVE_CATALOG=false`. Live checkout creates and completes Medusa carts and orders through the selected region, shipping, and payment providers.
+
+Medusa scopes products to the publishable key's sales channels, while its category and collection endpoints return global Admin taxonomy. The storefront therefore derives visible category and collection IDs from the products returned for the current publishable key. Empty or unrelated Admin taxonomy is hidden automatically, and its direct storefront routes resolve to the themed not-found page.
 
 ## Validation
 

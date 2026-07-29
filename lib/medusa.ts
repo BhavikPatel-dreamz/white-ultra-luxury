@@ -1,4 +1,5 @@
 import type { HttpTypes } from "@medusajs/types";
+import { cache } from "react";
 import type {
   Category,
   Collection,
@@ -13,7 +14,6 @@ import { sdk } from "@/api/api";
 import {
   deriveCatalogCategoryNames,
   getCatalogCategoryByHandle,
-  getCatalogCollectionByHandle,
   mergeCatalogCategories,
   mergeCatalogCollections,
   normalizeCatalogText,
@@ -60,10 +60,12 @@ function getCollectionFallbackImage(seed: string) {
   return COLLECTION_FALLBACK_IMAGES[stableNumber(seed) % COLLECTION_FALLBACK_IMAGES.length];
 }
 const DEFAULT_LIMIT = 12;
+const TAXONOMY_PAGE_SIZE = 100;
 const LIVE_CATALOG_ENABLED =
   process.env.NEXT_PUBLIC_EMBER_HALO_LIVE_CATALOG !== "false";
 
 const PRODUCT_FIELDS = [
+  "*variants.calculated_price",
   "id",
   "title",
   "handle",
@@ -137,6 +139,11 @@ export type PaginatedProducts = {
   limit: number;
   offset: number;
   region: StoreRegionSummary | null;
+};
+
+export type CatalogTaxonomy = {
+  categories: Category[];
+  collections: Collection[];
 };
 
 export type StoreRegionSummary = {
@@ -466,6 +473,10 @@ function getVariantStock(variant: HttpTypes.StoreProductVariant) {
   return variant.inventory_quantity > 0;
 }
 
+function hasCalculatedPrice(variant: HttpTypes.StoreProductVariant) {
+  return typeof variant.calculated_price?.calculated_amount === "number";
+}
+
 function getVariantOptions(variant: HttpTypes.StoreProductVariant) {
   return (
     variant.options?.flatMap((option) => {
@@ -489,6 +500,7 @@ function findOptionValue(
 function mapVariant(variant: HttpTypes.StoreProductVariant, fallbackCurrency: string) {
   const calculatedPrice = variant.calculated_price;
   const currencyCode = calculatedPrice?.currency_code ?? fallbackCurrency;
+  const priceAvailable = hasCalculatedPrice(variant);
   const price = calculatedPrice?.calculated_amount ?? 0;
   const options = getVariantOptions(variant);
 
@@ -496,12 +508,14 @@ function mapVariant(variant: HttpTypes.StoreProductVariant, fallbackCurrency: st
     color: getVariantColor(variant),
     flavor: findOptionValue(options, ["flavor", "flavour", "taste"]),
     id: variant.id,
-    inStock: getVariantStock(variant),
+    inStock: priceAvailable && getVariantStock(variant),
     name: getVariantName(variant),
     nicotineStrength: findOptionValue(options, ["nicotine", "strength", "mg"]),
     options,
     price,
-    priceDisplay: formatMoney(price, currencyCode),
+    priceDisplay: priceAvailable
+      ? formatMoney(price, currencyCode)
+      : "Price unavailable",
   } satisfies ProductVariant;
 }
 
@@ -742,7 +756,7 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
   const description = product.description ?? product.subtitle ?? product.title;
   const tags = product.tags?.map((tag) => tag.value).filter(Boolean) ?? [];
   const sourceCategoryNames =
-    product.categories?.map((category) => category.name).filter(Boolean) ?? [];
+    product.categories?.map((category) => category.name.trim()).filter(Boolean) ?? [];
   const inferredCategoryNames = deriveCatalogCategoryNames([
     ...sourceCategoryNames,
     product.title,
@@ -812,7 +826,7 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
     nicotineStrengths,
     optionLabel,
     price,
-    priceDisplay: formatMoney(price, currencyCode),
+    priceDisplay: selectedVariant?.priceDisplay ?? "Price unavailable",
     rating:
       metadataNumber(product.metadata, ["rating", "rating_average"]) ??
       4.6 + (stableNumber(product.id) % 4) / 10,
@@ -842,7 +856,7 @@ export function mapProduct(product: HttpTypes.StoreProduct, fallbackCurrency = "
               name: "Unavailable",
               options: [],
               price: 0,
-              priceDisplay: formatMoney(0, currencyCode),
+              priceDisplay: "Price unavailable",
             },
           ],
   } satisfies Product;
@@ -852,13 +866,13 @@ export function mapCollection(collection: HttpTypes.StoreCollection) {
   return {
     description:
       metadataString(collection.metadata, ["description", "short_description"]) ??
-      `Explore ${collection.title}.`,
+      `Explore ${collection.title.trim()}.`,
     handle: collection.handle,
     id: collection.id,
     image:
       metadataString(collection.metadata, ["image", "thumbnail"]) ??
       getCollectionFallbackImage(collection.id),
-    name: collection.title,
+    name: collection.title.trim(),
     productCount: collection.products?.length,
     tagline: metadataString(collection.metadata, ["tagline", "eyebrow"]) ?? "Curated collection",
   } satisfies Collection;
@@ -866,19 +880,227 @@ export function mapCollection(collection: HttpTypes.StoreCollection) {
 
 export function mapCategory(category: HttpTypes.StoreProductCategory) {
   return {
-    description: category.description || `Explore ${category.name}.`,
+    description: category.description || `Explore ${category.name.trim()}.`,
     handle: category.handle,
     id: category.id,
     image:
       metadataString(category.metadata, ["image", "thumbnail"]) ??
       getCategoryFallbackImage([category.name, category.handle], category.id),
-    name: category.name,
+    name: category.name.trim(),
     parentId: category.parent_category_id,
     productCount: category.products?.length,
   } satisfies Category;
 }
 
-export async function getDefaultRegion() {
+type VisibleTaxonomyIndex = {
+  categoryProductImages: Map<string, { image: string; productId: string }>;
+  categoryProductCounts: Map<string, number>;
+  collectionProductCounts: Map<string, number>;
+};
+
+function incrementCount(counts: Map<string, number>, id: string) {
+  counts.set(id, (counts.get(id) ?? 0) + 1);
+}
+
+function getProductTaxonomyImage(product: HttpTypes.StoreProduct) {
+  const thumbnail = product.thumbnail?.trim();
+
+  if (thumbnail) {
+    return thumbnail;
+  }
+
+  return [...(product.images ?? [])]
+    .sort((first, second) => first.rank - second.rank)
+    .map((image) => image.url?.trim())
+    .find(Boolean);
+}
+
+async function listVisibleProductTaxonomy(): Promise<VisibleTaxonomyIndex> {
+  const categoryProductImages = new Map<string, { image: string; productId: string }>();
+  const categoryProductCounts = new Map<string, number>();
+  const collectionProductCounts = new Map<string, number>();
+  let offset = 0;
+  let count = 0;
+
+  do {
+    const response = await sdk.store.product.list({
+      fields: "id,thumbnail,collection_id,*images,*categories",
+      limit: TAXONOMY_PAGE_SIZE,
+      offset,
+      order: "id",
+    });
+
+    for (const product of response.products) {
+      const productImage = getProductTaxonomyImage(product);
+      const productCategoryIds = new Set(
+        product.categories?.map((category) => category.id).filter(Boolean) ?? [],
+      );
+
+      for (const categoryId of productCategoryIds) {
+        incrementCount(categoryProductCounts, categoryId);
+
+        const currentImage = categoryProductImages.get(categoryId);
+
+        if (productImage && (!currentImage || product.id < currentImage.productId)) {
+          categoryProductImages.set(categoryId, {
+            image: productImage,
+            productId: product.id,
+          });
+        }
+      }
+
+      if (product.collection_id) {
+        incrementCount(collectionProductCounts, product.collection_id);
+      }
+    }
+
+    count = response.count;
+    offset += response.products.length;
+
+    if (response.products.length === 0) {
+      break;
+    }
+  } while (offset < count);
+
+  return { categoryProductCounts, categoryProductImages, collectionProductCounts };
+}
+
+async function listAllStoreCategories() {
+  const categories: HttpTypes.StoreProductCategory[] = [];
+  let offset = 0;
+  let count = 0;
+
+  do {
+    const response = await sdk.store.category.list({
+      fields: "id,name,description,handle,parent_category_id,metadata",
+      limit: TAXONOMY_PAGE_SIZE,
+      offset,
+    });
+
+    categories.push(...response.product_categories);
+    count = response.count;
+    offset += response.product_categories.length;
+
+    if (response.product_categories.length === 0) {
+      break;
+    }
+  } while (offset < count);
+
+  return categories;
+}
+
+async function listAllStoreCollections() {
+  const collections: HttpTypes.StoreCollection[] = [];
+  let offset = 0;
+  let count = 0;
+
+  do {
+    const response = await sdk.store.collection.list({
+      fields: "id,title,handle,metadata",
+      limit: TAXONOMY_PAGE_SIZE,
+      offset,
+    });
+
+    collections.push(...response.collections);
+    count = response.count;
+    offset += response.collections.length;
+
+    if (response.collections.length === 0) {
+      break;
+    }
+  } while (offset < count);
+
+  return collections;
+}
+
+const getLiveCatalogTaxonomy = cache(async (): Promise<CatalogTaxonomy> => {
+  try {
+    const [sourceCategories, sourceCollections, visibility] = await Promise.all([
+      listAllStoreCategories(),
+      listAllStoreCollections(),
+      listVisibleProductTaxonomy(),
+    ]);
+
+    const categories = sourceCategories.flatMap((category) => {
+      const productCount = visibility.categoryProductCounts.get(category.id);
+      const productImage = visibility.categoryProductImages.get(category.id)?.image;
+
+      return productCount
+        ? [{ ...mapCategory(category), ...(productImage ? { image: productImage } : {}), productCount }]
+        : [];
+    });
+    const collections = sourceCollections.flatMap((collection) => {
+      const productCount = visibility.collectionProductCounts.get(collection.id);
+
+      return productCount
+        ? [{ ...mapCollection(collection), productCount }]
+        : [];
+    });
+
+    return { categories, collections };
+  } catch {
+    // Fail closed: never expose unscoped Admin taxonomy if product visibility
+    // cannot be resolved for the configured publishable key.
+    return { categories: [], collections: [] };
+  }
+});
+
+export async function listCatalogTaxonomy(): Promise<CatalogTaxonomy> {
+  if (!LIVE_CATALOG_ENABLED) {
+    return {
+      categories: mergeCatalogCategories([]),
+      collections: mergeCatalogCollections([]),
+    };
+  }
+
+  return getLiveCatalogTaxonomy();
+}
+
+function mapRegionSummary(region: HttpTypes.StoreRegion) {
+  return {
+    currencyCode: region.currency_code,
+    id: region.id,
+    name: region.name,
+  } satisfies StoreRegionSummary;
+}
+
+async function regionHasCatalogPricing(regionId: string) {
+  let offset = 0;
+  let count = 0;
+
+  try {
+    do {
+      const response = await sdk.store.product.list({
+        fields: "*variants.calculated_price,id",
+        limit: TAXONOMY_PAGE_SIZE,
+        offset,
+        order: "id",
+        region_id: regionId,
+      });
+
+      if (
+        response.products.some((product) =>
+          product.variants?.some(hasCalculatedPrice),
+        )
+      ) {
+        return true;
+      }
+
+      count = response.count;
+      offset += response.products.length;
+
+      if (response.products.length === 0) {
+        break;
+      }
+    } while (offset < count);
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
+const resolveDefaultRegion = cache(async () => {
   const configuredCountry = process.env.NEXT_PUBLIC_DEFAULT_REGION?.trim().toLowerCase();
   let regions: HttpTypes.StoreRegion[];
 
@@ -891,22 +1113,29 @@ export async function getDefaultRegion() {
     return null;
   }
 
-  const selectedRegion =
-    (configuredCountry
-      ? regions.find((region) =>
-          region.countries?.some((country) => country.iso_2 === configuredCountry),
-        )
-      : undefined) ?? regions[0];
+  const configuredRegion = configuredCountry
+    ? regions.find((region) =>
+        region.countries?.some((country) => country.iso_2 === configuredCountry),
+      )
+    : undefined;
+  const candidates = configuredRegion
+    ? [configuredRegion, ...regions.filter((region) => region.id !== configuredRegion.id)]
+    : regions;
 
-  if (!selectedRegion) {
+  if (candidates.length === 0) {
     return null;
   }
 
-  return {
-    currencyCode: selectedRegion.currency_code,
-    id: selectedRegion.id,
-    name: selectedRegion.name,
-  } satisfies StoreRegionSummary;
+  const pricingAvailability = await Promise.all(
+    candidates.map((region) => regionHasCatalogPricing(region.id)),
+  );
+  const pricedRegion = candidates.find((_, index) => pricingAvailability[index]);
+
+  return mapRegionSummary(pricedRegion ?? candidates[0]);
+});
+
+export async function getDefaultRegion() {
+  return resolveDefaultRegion();
 }
 
 export async function listProducts({
@@ -1042,77 +1271,23 @@ export async function getRelatedProducts(handle: string, limit = 4) {
 }
 
 export async function listCollections(limit = 100) {
-  if (!LIVE_CATALOG_ENABLED) {
-    return mergeCatalogCollections([]);
-  }
-
-  try {
-    const response = await sdk.store.collection.list({
-      fields: "id,title,handle,metadata",
-      limit,
-    });
-
-    return response.collections.map(mapCollection);
-  } catch {
-    return [];
-  }
+  const { collections } = await listCatalogTaxonomy();
+  return collections.slice(0, limit);
 }
 
 export async function getCollectionByHandle(handle: string) {
-  if (!LIVE_CATALOG_ENABLED) {
-    return getCatalogCollectionByHandle(handle) ?? null;
-  }
-
-  try {
-    const response = await sdk.store.collection.list({
-      fields: "id,title,handle,metadata",
-      handle,
-      limit: 1,
-    });
-
-    return response.collections[0]
-      ? mapCollection(response.collections[0])
-      : null;
-  } catch {
-    return null;
-  }
+  const { collections } = await listCatalogTaxonomy();
+  return collections.find((collection) => collection.handle === handle) ?? null;
 }
 
 export async function listCategories(limit = 100) {
-  if (!LIVE_CATALOG_ENABLED) {
-    return mergeCatalogCategories([]);
-  }
-
-  try {
-    const response = await sdk.store.category.list({
-      fields: "id,name,description,handle,parent_category_id,metadata",
-      limit,
-    });
-
-    return response.product_categories.map(mapCategory);
-  } catch {
-    return [];
-  }
+  const { categories } = await listCatalogTaxonomy();
+  return categories.slice(0, limit);
 }
 
 export async function getCategoryByHandle(handle: string) {
-  if (!LIVE_CATALOG_ENABLED) {
-    return getCatalogCategoryByHandle(handle) ?? null;
-  }
-
-  try {
-    const response = await sdk.store.category.list({
-      fields: "id,name,description,handle,parent_category_id,metadata",
-      handle,
-      limit: 1,
-    });
-
-    return response.product_categories[0]
-      ? mapCategory(response.product_categories[0])
-      : null;
-  } catch {
-    return null;
-  }
+  const { categories } = await listCatalogTaxonomy();
+  return categories.find((category) => category.handle === handle) ?? null;
 }
 
 export async function retrieveCart(cartId: string) {

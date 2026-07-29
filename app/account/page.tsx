@@ -106,7 +106,7 @@ function AccountPreview() {
             <Eyebrow className="text-primary">Recommended next</Eyebrow>
             <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="relative aspect-[4/3] w-full overflow-hidden bg-surface sm:w-52"><Image alt="Curated e-liquid bottles" className="object-cover" fill sizes="208px" src="/ember-halo/category-e-liquids.png" /></div>
-              <div><h2 className="font-display text-2xl font-semibold">Flavor Lab / Bright edit</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Citrus, iced fruit, and clear botanical profiles selected to pair with compact pod systems.</p><ButtonLink className="mt-5" href="/collections/flavor-studio" variant="secondary">View the edit</ButtonLink></div>
+              <div><h2 className="font-display text-2xl font-semibold">Explore the live catalog</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Discover the latest products available for this storefront, curated directly from the current Medusa catalog.</p><ButtonLink className="mt-5" href="/products" variant="secondary">Browse products</ButtonLink></div>
             </div>
           </section>
         </main>

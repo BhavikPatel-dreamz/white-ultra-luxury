@@ -3,11 +3,14 @@ import { CollectionCard } from "@/components/sections/collection-card";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
 import { SectionTitle } from "@/components/ui/section-title";
-import { collections as fallbackCollections } from "@/lib/data";
 import { listCollections } from "@/lib/medusa";
 
 export async function CatalogSection() {
-  const collections = (await listCollections().catch(() => fallbackCollections)).slice(0, 3);
+  const collections = (await listCollections().catch(() => [])).slice(0, 3);
+
+  if (collections.length === 0) {
+    return null;
+  }
 
   return (
     <section className="relative bg-background">

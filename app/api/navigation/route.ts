@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { listCategories, listCollections } from "@/lib/medusa";
+import { listCatalogTaxonomy } from "@/lib/medusa";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const [categories, collections] = await Promise.all([
-      listCategories(),
-      listCollections(),
-    ]);
+    const { categories, collections } = await listCatalogTaxonomy();
 
     return NextResponse.json(
       { categories, collections },

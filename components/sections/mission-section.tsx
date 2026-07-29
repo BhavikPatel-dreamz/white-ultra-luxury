@@ -48,7 +48,7 @@ export function MissionSection() {
             </div>
             <Link
               className="mt-9 inline-flex items-center gap-2 text-sm transition-colors hover:text-primary"
-              href="/collections/accessories"
+              href="/categories/accessories"
             >
               Shop accessories
               <Icon className="size-4" name="arrow-up-right" />

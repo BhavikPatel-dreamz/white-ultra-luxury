@@ -7,8 +7,6 @@ import { EmberProductCard } from "@/components/sections/ember-product-card";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
 import {
-  collections as fallbackCollections,
-  homeCategories,
   popularBrands,
   setupSteps,
   testimonials,
@@ -28,28 +26,17 @@ export function EmberHomePage({
   products,
 }: EmberHomePageProps) {
   const catalogue = products;
-  const categoryEdit = categories.length
-    ? categories
-    : homeCategories.map((category) => ({
-        description: category.kicker,
-        handle: category.handle,
-        id: `fallback-${category.handle}`,
-        image: category.image,
-        name: category.name,
-        parentId: null,
-      }));
-  const collectionEdit = collections.length ? collections : fallbackCollections;
   const trending = selectProducts(catalogue, "featured", 0);
   const bestSellers = selectProducts(catalogue, "bestseller", 4);
   const newest = selectNewest(catalogue);
 
   return (
     <div className="overflow-hidden">
-      <NightRitualHero collection={collectionEdit[0]} />
+      <NightRitualHero collection={collections[0]} />
       <ServiceRail />
-      <PromoBento collections={collectionEdit} />
-      <FeaturedCategories categories={categoryEdit} />
-      <FeaturedCollections collections={collectionEdit} />
+      <PromoBento collections={collections} />
+      <FeaturedCategories categories={categories} />
+      <FeaturedCollections collections={collections} />
       <ProductShelf
         actionHref="/products?sort=featured"
         actionLabel="Shop trending"
@@ -119,7 +106,7 @@ function fillUnique(products: Product[], count: number) {
   return result;
 }
 
-function NightRitualHero({ collection }: { collection: Collection }) {
+function NightRitualHero({ collection }: { collection?: Collection }) {
   return (
     <section className="relative isolate min-h-[46rem] border-b border-border bg-ink lg:min-h-[calc(100svh-10rem)]">
       <Image
@@ -173,7 +160,7 @@ function NightRitualHero({ collection }: { collection: Collection }) {
             </Link>
             <Link
               className="inline-flex h-13 items-center gap-3 border border-foreground/30 bg-background/30 px-6 text-[0.66rem] font-bold uppercase tracking-[0.15em] backdrop-blur transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
-              href={`/collections/${collection.handle}`}
+              href={collection ? `/collections/${collection.handle}` : "/products"}
             >
               Enter the ritual
             </Link>
@@ -255,7 +242,11 @@ function ServiceRail() {
 
 function PromoBento({ collections }: { collections: Collection[] }) {
   const primaryCollection = collections[0];
-  const secondaryCollection = collections[1] ?? primaryCollection;
+  const secondaryCollection = collections[1];
+
+  if (!primaryCollection) {
+    return null;
+  }
 
   return (
     <section className="bg-background py-20 md:py-28">
@@ -317,21 +308,39 @@ function PromoBento({ collections }: { collections: Collection[] }) {
 
           <Link
             className="group relative min-h-72 overflow-hidden border border-border bg-violet md:col-span-5 md:min-h-0"
-            href={`/collections/${secondaryCollection.handle}`}
+            href={
+              secondaryCollection
+                ? `/collections/${secondaryCollection.handle}`
+                : "/products?sort=newest"
+            }
           >
             <Image
-              alt={`${secondaryCollection.name} collection`}
+              alt={
+                secondaryCollection
+                  ? `${secondaryCollection.name} collection`
+                  : "Latest products in the Ember and Halo catalog"
+              }
               className="object-cover opacity-70 transition-[opacity,transform] duration-700 group-hover:scale-105 group-hover:opacity-90"
               fill
               sizes="(min-width: 768px) 42vw, 100vw"
-              src={secondaryCollection.image}
+              src={
+                secondaryCollection?.image ??
+                "/ember-halo/collection-pocket-edit.png"
+              }
             />
             <div className="absolute inset-0 bg-gradient-to-r from-violet via-violet/45 to-transparent" />
             <div className="absolute inset-0 flex flex-col justify-between p-6 md:p-8">
-              <span className="text-[0.55rem] font-bold uppercase tracking-[0.17em]">Flavor finder</span>
+              <span className="text-[0.55rem] font-bold uppercase tracking-[0.17em]">
+                {secondaryCollection ? "Collection spotlight" : "Fresh in store"}
+              </span>
               <div>
-                <h3 className="font-display text-3xl font-bold uppercase leading-none">{secondaryCollection.name}</h3>
-                <p className="mt-2 max-w-xs text-sm text-white/75">{secondaryCollection.description}</p>
+                <h3 className="font-display text-3xl font-bold uppercase leading-none">
+                  {secondaryCollection?.name ?? "Latest arrivals"}
+                </h3>
+                <p className="mt-2 max-w-xs text-sm text-white/75">
+                  {secondaryCollection?.description ??
+                    "Explore the newest products available in this storefront."}
+                </p>
               </div>
             </div>
           </Link>
@@ -348,6 +357,10 @@ function FeaturedCategories({ categories }: { categories: Category[] }) {
     lime: "bg-primary text-primary-foreground",
     violet: "bg-violet text-white",
   } as const;
+
+  if (categories.length === 0) {
+    return null;
+  }
 
   return (
     <section className="border-y border-border bg-surface py-20 md:py-28">
@@ -416,6 +429,10 @@ function FeaturedCategories({ categories }: { categories: Category[] }) {
 function FeaturedCollections({ collections }: { collections: Collection[] }) {
   const spans = ["lg:col-span-7", "lg:col-span-5", "lg:col-span-5", "lg:col-span-7"];
 
+  if (collections.length === 0) {
+    return null;
+  }
+
   return (
     <section className="bg-background py-20 md:py-32">
       <Container>
@@ -430,7 +447,7 @@ function FeaturedCollections({ collections }: { collections: Collection[] }) {
             <Link
               className={cx(
                 "group relative min-h-[27rem] overflow-hidden border border-border sm:min-h-[34rem]",
-                spans[index % spans.length],
+                collections.length === 1 ? "lg:col-span-12" : spans[index % spans.length],
               )}
               href={`/collections/${collection.handle}`}
               key={collection.handle}
